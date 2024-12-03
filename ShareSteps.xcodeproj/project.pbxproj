@@ -1,0 +1,597 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXContainerItemProxy section */
+		A89E80EF2CF1278500236586 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A89E80D42CF1278400236586 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A89E80DB2CF1278400236586;
+			remoteInfo = ShareSteps;
+		};
+		A89E80F92CF1278500236586 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A89E80D42CF1278400236586 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A89E80DB2CF1278400236586;
+			remoteInfo = ShareSteps;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		A89E80DC2CF1278400236586 /* ShareSteps.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShareSteps.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A89E80EE2CF1278500236586 /* ShareStepsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShareStepsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A89E80F82CF1278500236586 /* ShareStepsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShareStepsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A8CEFA4D2CF1444200EC75B7 /* Exceptions for "ShareSteps" folder in "ShareSteps" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				DateExtensions.swift,
+				DictionaryExtensions.swift,
+				Info.plist,
+			);
+			target = A89E80DB2CF1278400236586 /* ShareSteps */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+		A829F2372CF4427600BB4946 /* Exceptions for "ShareSteps" folder in "Copy Bundle Resources" phase from "ShareSteps" target */ = {
+			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
+			buildPhase = A89E80DA2CF1278400236586 /* Resources */;
+			membershipExceptions = (
+				DateExtensions.swift,
+			);
+		};
+/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		A89E80DE2CF1278400236586 /* ShareSteps */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A8CEFA4D2CF1444200EC75B7 /* Exceptions for "ShareSteps" folder in "ShareSteps" target */,
+				A829F2372CF4427600BB4946 /* Exceptions for "ShareSteps" folder in "Copy Bundle Resources" phase from "ShareSteps" target */,
+			);
+			path = ShareSteps;
+			sourceTree = "<group>";
+		};
+		A89E80F12CF1278500236586 /* ShareStepsTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ShareStepsTests;
+			sourceTree = "<group>";
+		};
+		A89E80FB2CF1278500236586 /* ShareStepsUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ShareStepsUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A89E80D92CF1278400236586 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A89E80EB2CF1278500236586 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A89E80F52CF1278500236586 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A89E80D32CF1278400236586 = {
+			isa = PBXGroup;
+			children = (
+				A89E80DE2CF1278400236586 /* ShareSteps */,
+				A89E80F12CF1278500236586 /* ShareStepsTests */,
+				A89E80FB2CF1278500236586 /* ShareStepsUITests */,
+				A89E80DD2CF1278400236586 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A89E80DD2CF1278400236586 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				A89E80DC2CF1278400236586 /* ShareSteps.app */,
+				A89E80EE2CF1278500236586 /* ShareStepsTests.xctest */,
+				A89E80F82CF1278500236586 /* ShareStepsUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A89E80DB2CF1278400236586 /* ShareSteps */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A89E81022CF1278500236586 /* Build configuration list for PBXNativeTarget "ShareSteps" */;
+			buildPhases = (
+				A89E80D82CF1278400236586 /* Sources */,
+				A89E80D92CF1278400236586 /* Frameworks */,
+				A89E80DA2CF1278400236586 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				A89E80DE2CF1278400236586 /* ShareSteps */,
+			);
+			name = ShareSteps;
+			packageProductDependencies = (
+			);
+			productName = ShareSteps;
+			productReference = A89E80DC2CF1278400236586 /* ShareSteps.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A89E80ED2CF1278500236586 /* ShareStepsTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A89E81052CF1278500236586 /* Build configuration list for PBXNativeTarget "ShareStepsTests" */;
+			buildPhases = (
+				A89E80EA2CF1278500236586 /* Sources */,
+				A89E80EB2CF1278500236586 /* Frameworks */,
+				A89E80EC2CF1278500236586 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A89E80F02CF1278500236586 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A89E80F12CF1278500236586 /* ShareStepsTests */,
+			);
+			name = ShareStepsTests;
+			packageProductDependencies = (
+			);
+			productName = ShareStepsTests;
+			productReference = A89E80EE2CF1278500236586 /* ShareStepsTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		A89E80F72CF1278500236586 /* ShareStepsUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A89E81082CF1278500236586 /* Build configuration list for PBXNativeTarget "ShareStepsUITests" */;
+			buildPhases = (
+				A89E80F42CF1278500236586 /* Sources */,
+				A89E80F52CF1278500236586 /* Frameworks */,
+				A89E80F62CF1278500236586 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A89E80FA2CF1278500236586 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				A89E80FB2CF1278500236586 /* ShareStepsUITests */,
+			);
+			name = ShareStepsUITests;
+			packageProductDependencies = (
+			);
+			productName = ShareStepsUITests;
+			productReference = A89E80F82CF1278500236586 /* ShareStepsUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A89E80D42CF1278400236586 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1610;
+				LastUpgradeCheck = 1610;
+				TargetAttributes = {
+					A89E80DB2CF1278400236586 = {
+						CreatedOnToolsVersion = 16.1;
+					};
+					A89E80ED2CF1278500236586 = {
+						CreatedOnToolsVersion = 16.1;
+						TestTargetID = A89E80DB2CF1278400236586;
+					};
+					A89E80F72CF1278500236586 = {
+						CreatedOnToolsVersion = 16.1;
+						TestTargetID = A89E80DB2CF1278400236586;
+					};
+				};
+			};
+			buildConfigurationList = A89E80D72CF1278400236586 /* Build configuration list for PBXProject "ShareSteps" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = A89E80D32CF1278400236586;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = A89E80DD2CF1278400236586 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A89E80DB2CF1278400236586 /* ShareSteps */,
+				A89E80ED2CF1278500236586 /* ShareStepsTests */,
+				A89E80F72CF1278500236586 /* ShareStepsUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A89E80DA2CF1278400236586 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A89E80EC2CF1278500236586 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A89E80F62CF1278500236586 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A89E80D82CF1278400236586 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A89E80EA2CF1278500236586 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A89E80F42CF1278500236586 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A89E80F02CF1278500236586 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A89E80DB2CF1278400236586 /* ShareSteps */;
+			targetProxy = A89E80EF2CF1278500236586 /* PBXContainerItemProxy */;
+		};
+		A89E80FA2CF1278500236586 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A89E80DB2CF1278400236586 /* ShareSteps */;
+			targetProxy = A89E80F92CF1278500236586 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		A89E81002CF1278500236586 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		A89E81012CF1278500236586 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		A89E81032CF1278500236586 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ShareSteps/ShareSteps.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"ShareSteps/Preview Content\"";
+				DEVELOPMENT_TEAM = W2EWGHMLCA;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ShareSteps/Info.plist;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "This app reads step count data to share with your partner.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "This app writes shared step data to your Health app.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.molseek.ShareSteps;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A89E81042CF1278500236586 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = ShareSteps/ShareSteps.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_ASSET_PATHS = "\"ShareSteps/Preview Content\"";
+				DEVELOPMENT_TEAM = W2EWGHMLCA;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = ShareSteps/Info.plist;
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "This app reads step count data to share with your partner.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "This app writes shared step data to your Health app.";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.molseek.ShareSteps;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A89E81062CF1278500236586 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = W2EWGHMLCA;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.molseek.ShareStepsTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ShareSteps.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ShareSteps";
+			};
+			name = Debug;
+		};
+		A89E81072CF1278500236586 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = W2EWGHMLCA;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 18.1;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.molseek.ShareStepsTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/ShareSteps.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/ShareSteps";
+			};
+			name = Release;
+		};
+		A89E81092CF1278500236586 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = W2EWGHMLCA;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.molseek.ShareStepsUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = ShareSteps;
+			};
+			name = Debug;
+		};
+		A89E810A2CF1278500236586 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = W2EWGHMLCA;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.molseek.ShareStepsUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = ShareSteps;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A89E80D72CF1278400236586 /* Build configuration list for PBXProject "ShareSteps" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A89E81002CF1278500236586 /* Debug */,
+				A89E81012CF1278500236586 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A89E81022CF1278500236586 /* Build configuration list for PBXNativeTarget "ShareSteps" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A89E81032CF1278500236586 /* Debug */,
+				A89E81042CF1278500236586 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A89E81052CF1278500236586 /* Build configuration list for PBXNativeTarget "ShareStepsTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A89E81062CF1278500236586 /* Debug */,
+				A89E81072CF1278500236586 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A89E81082CF1278500236586 /* Build configuration list for PBXNativeTarget "ShareStepsUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A89E81092CF1278500236586 /* Debug */,
+				A89E810A2CF1278500236586 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = A89E80D42CF1278400236586 /* Project object */;
+}
