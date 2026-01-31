@@ -1,0 +1,1 @@
+git add . && git commit -m "Fixes" && git push --set-upstream origin $(git branch --show-current) && git show --name-only --oneline HEAD
