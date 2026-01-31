@@ -1,0 +1,71 @@
+# Xcode
+build/
+DerivedData/
+*.xcuserstate
+*.xccheckout
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Xcode user-specific files
+xcuserdata/
+*.xcworkspace/xcuserdata/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Packages/
+Package.resolved
+
+# CocoaPods
+Pods/
+Podfile.lock
+
+# Carthage
+Carthage/Build/
+Carthage/Checkouts/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# App packaging
+*.ipa
+*.app.dSYM.zip
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+
+# Large image files that aren't needed
+*.psd
+*.sketch
+
+# Credentials and secrets
+*.pem
+*.p12
+*.mobileprovision
+Secrets/
+credentials/
+
+# Backup files
+backup*/
+*.backup
+
+# IDE
+.idea/
+*.swp
+*.swo
