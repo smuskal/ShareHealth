@@ -28,6 +28,15 @@ struct MainMenuView: View {
                         )
                     }
 
+                    NavigationLink(destination: HistoricalExportView()) {
+                        MenuButton(
+                            title: "Historical Export",
+                            subtitle: "Export data for a date range",
+                            iconName: "calendar.badge.clock",
+                            color: .orange
+                        )
+                    }
+
                     NavigationLink(destination: ContentView(importedSteps: $importedSteps, shouldFetchHealthData: shouldFetchHealthData)) {
                         MenuButton(
                             title: "Share Steps",

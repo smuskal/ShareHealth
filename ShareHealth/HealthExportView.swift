@@ -298,11 +298,11 @@ struct HealthExportView: View {
     // MARK: - File Naming Info
     private var fileNamingSection: some View {
         VStack(spacing: 4) {
-            Text("File will be named:")
+            Text("File will be saved to:")
                 .font(.caption)
                 .foregroundColor(.secondary)
 
-            Text("HealthMetrics-\(formatDateForFilename(selectedDate)).csv")
+            Text("\(formatYearMonth(selectedDate))/HealthMetrics-\(formatDateForFilename(selectedDate)).csv")
                 .font(.caption)
                 .fontWeight(.medium)
                 .foregroundColor(.green)
@@ -525,10 +525,18 @@ struct HealthExportView: View {
         }
         defer { folderURL.stopAccessingSecurityScopedResource() }
 
-        let fileName = sourceURL.lastPathComponent
-        let destinationURL = folderURL.appendingPathComponent(fileName)
-
         do {
+            // Create year/month subfolder structure
+            let yearMonthPath = formatYearMonth(selectedDate)
+            let subfolderURL = folderURL.appendingPathComponent(yearMonthPath, isDirectory: true)
+
+            if !FileManager.default.fileExists(atPath: subfolderURL.path) {
+                try FileManager.default.createDirectory(at: subfolderURL, withIntermediateDirectories: true)
+            }
+
+            let fileName = sourceURL.lastPathComponent
+            let destinationURL = subfolderURL.appendingPathComponent(fileName)
+
             if FileManager.default.fileExists(atPath: destinationURL.path) {
                 try FileManager.default.removeItem(at: destinationURL)
             }
@@ -538,6 +546,12 @@ struct HealthExportView: View {
             errorMessage = "Failed to save file: \(error.localizedDescription)"
             showingError = true
         }
+    }
+
+    private func formatYearMonth(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy/MM"
+        return formatter.string(from: date)
     }
 
     private func exportWithShareSheet() {

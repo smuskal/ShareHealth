@@ -265,6 +265,8 @@ class HealthDataExporter: ObservableObject {
         "Sleep Analysis [Deep] (hr)",
         "Sleep Analysis [REM] (hr)",
         "Sleep Analysis [Awake] (hr)",
+        "Bedtime",
+        "Wake Time",
         "Sodium (mg)",
         "Stair Speed: Down (ft/s)",
         "Stair Speed: Up (ft/s)",
@@ -299,6 +301,55 @@ class HealthDataExporter: ObservableObject {
         "Wheelchair Distance (mi)",
         "Zinc (mg)"
     ]
+
+    /// Find the earliest date with health data available
+    func findEarliestHealthDataDate(completion: @escaping (Date?) -> Void) {
+        // Query for the oldest step count sample as a proxy for earliest health data
+        guard let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) else {
+            completion(nil)
+            return
+        }
+
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+        let query = HKSampleQuery(
+            sampleType: stepType,
+            predicate: nil,
+            limit: 1,
+            sortDescriptors: [sortDescriptor]
+        ) { _, samples, error in
+            DispatchQueue.main.async {
+                if let sample = samples?.first {
+                    completion(sample.startDate)
+                } else {
+                    // Try activity energy as fallback
+                    self.findEarliestActivityDate(completion: completion)
+                }
+            }
+        }
+
+        healthStore.execute(query)
+    }
+
+    private func findEarliestActivityDate(completion: @escaping (Date?) -> Void) {
+        guard let activityType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) else {
+            completion(nil)
+            return
+        }
+
+        let sortDescriptor = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+        let query = HKSampleQuery(
+            sampleType: activityType,
+            predicate: nil,
+            limit: 1,
+            sortDescriptors: [sortDescriptor]
+        ) { _, samples, _ in
+            DispatchQueue.main.async {
+                completion(samples?.first?.startDate)
+            }
+        }
+
+        healthStore.execute(query)
+    }
 
     /// Request authorization for all health data types
     func requestFullAuthorization(completion: @escaping (Bool) -> Void) {
@@ -732,6 +783,40 @@ class HealthDataExporter: ObservableObject {
             if remTime > 0 { sleepData["Sleep Analysis [REM] (hr)"] = self.formatValue(remTime / 3600.0) }
             if awakeTime > 0 { sleepData["Sleep Analysis [Awake] (hr)"] = self.formatValue(awakeTime / 3600.0) }
 
+            // Calculate Bedtime and Wake Time from the tagged intervals as decimal hours (24-hour format)
+            if !taggedIntervals.isEmpty {
+                let calendar = Calendar.current
+
+                // Bedtime: earliest start time of any sleep-related sample (In Bed or Asleep)
+                let bedtime = taggedIntervals.map { $0.start }.min()
+                if let bedtime = bedtime {
+                    let components = calendar.dateComponents([.hour, .minute], from: bedtime)
+                    if let hour = components.hour, let minute = components.minute {
+                        let decimalHour = Double(hour) + Double(minute) / 60.0
+                        sleepData["Bedtime"] = self.formatValue(decimalHour)
+                    }
+                }
+
+                // Wake Time: latest end time of Asleep samples (Core, Deep, REM, or Unspecified)
+                let asleepCategories: Set<Int> = [
+                    HKCategoryValueSleepAnalysis.asleepCore.rawValue,
+                    HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
+                    HKCategoryValueSleepAnalysis.asleepREM.rawValue,
+                    HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue
+                ]
+                let wakeTime = taggedIntervals
+                    .filter { asleepCategories.contains($0.category) }
+                    .map { $0.end }
+                    .max()
+                if let wakeTime = wakeTime {
+                    let components = calendar.dateComponents([.hour, .minute], from: wakeTime)
+                    if let hour = components.hour, let minute = components.minute {
+                        let decimalHour = Double(hour) + Double(minute) / 60.0
+                        sleepData["Wake Time"] = self.formatValue(decimalHour)
+                    }
+                }
+            }
+
             completion(sleepData)
         }
 
@@ -901,6 +986,106 @@ class HealthDataExporter: ObservableObject {
             return String(format: "%.0f", value)
         } else {
             return String(value)
+        }
+    }
+
+    /// Export health data for a date and return raw data dictionary (for batch exports)
+    func exportHealthDataRaw(for date: Date, completion: @escaping ([String: String]?) -> Void) {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
+            completion(nil)
+            return
+        }
+
+        var healthData: [String: String] = [:]
+        let group = DispatchGroup()
+
+        // Fetch all quantity metrics
+        for metric in quantityMetrics {
+            group.enter()
+            fetchQuantityMetric(metric, startDate: startOfDay, endDate: endOfDay) { value in
+                if let value = value {
+                    healthData[metric.csvHeader] = value
+                }
+                group.leave()
+            }
+        }
+
+        // Fetch heart rate min/max
+        group.enter()
+        fetchHeartRateMinMax(startDate: startOfDay, endDate: endOfDay) { minHR, maxHR in
+            if let minHR = minHR {
+                healthData["Heart Rate [Min] (count/min)"] = minHR
+            }
+            if let maxHR = maxHR {
+                healthData["Heart Rate [Max] (count/min)"] = maxHR
+            }
+            group.leave()
+        }
+
+        // Fetch sleep analysis
+        group.enter()
+        fetchSleepAnalysis(startDate: startOfDay, endDate: endOfDay) { sleepData in
+            for (key, value) in sleepData {
+                healthData[key] = value
+            }
+            group.leave()
+        }
+
+        // Fetch mindful minutes
+        group.enter()
+        fetchMindfulMinutes(startDate: startOfDay, endDate: endOfDay) { value in
+            if let value = value {
+                healthData["Mindful Minutes (min)"] = value
+            }
+            group.leave()
+        }
+
+        // Fetch handwashing
+        group.enter()
+        fetchHandwashing(startDate: startOfDay, endDate: endOfDay) { value in
+            if let value = value {
+                healthData["Handwashing (s)"] = value
+            }
+            group.leave()
+        }
+
+        // Fetch toothbrushing
+        group.enter()
+        fetchToothbrushing(startDate: startOfDay, endDate: endOfDay) { value in
+            if let value = value {
+                healthData["Toothbrushing (s)"] = value
+            }
+            group.leave()
+        }
+
+        // Fetch stand hours
+        group.enter()
+        fetchStandHours(startDate: startOfDay, endDate: endOfDay) { value in
+            if let value = value {
+                healthData["Apple Stand Hour (count)"] = value
+            }
+            group.leave()
+        }
+
+        // Fetch sexual activity
+        group.enter()
+        fetchSexualActivity(startDate: startOfDay, endDate: endOfDay) { unspecified, protectionUsed, protectionNotUsed in
+            if let val = unspecified {
+                healthData["Sexual Activity [Unspecified] (count)"] = val
+            }
+            if let val = protectionUsed {
+                healthData["Sexual Activity [Protection Used] (count)"] = val
+            }
+            if let val = protectionNotUsed {
+                healthData["Sexual Activity [Protection Not Used] (count)"] = val
+            }
+            group.leave()
+        }
+
+        group.notify(queue: .main) {
+            completion(healthData)
         }
     }
 
