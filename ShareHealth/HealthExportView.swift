@@ -21,6 +21,11 @@ struct HealthExportView: View {
     @State private var pendingExportURL: URL? = nil
     @State private var showingCameraPermissionAlert = false
 
+    // Data preview feature
+    @State private var showingDataPreview = false
+    @State private var previewData: [String: String]? = nil
+    @State private var isLoadingPreview = false
+
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
@@ -85,6 +90,9 @@ struct HealthExportView: View {
             }
         } message: {
             Text("To include face imagery with your exports, please enable camera access in Settings.")
+        }
+        .sheet(isPresented: $showingDataPreview) {
+            DataPreviewView(data: previewData ?? [:], date: selectedDate)
         }
     }
 
@@ -164,16 +172,46 @@ struct HealthExportView: View {
             Text("Select Date")
                 .font(.headline)
 
-            DatePicker(
-                "Export Date",
-                selection: $selectedDate,
-                in: ...Date(),
-                displayedComponents: [.date]
-            )
-            .datePickerStyle(.compact)
+            HStack {
+                DatePicker(
+                    "Export Date",
+                    selection: $selectedDate,
+                    in: ...Date(),
+                    displayedComponents: [.date]
+                )
+                .datePickerStyle(.compact)
+
+                Spacer()
+
+                Button(action: loadDataPreview) {
+                    if isLoadingPreview {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle())
+                    } else {
+                        HStack(spacing: 4) {
+                            Image(systemName: "eye")
+                            Text("View Data")
+                        }
+                    }
+                }
+                .buttonStyle(.bordered)
+                .tint(.blue)
+                .disabled(isLoadingPreview)
+            }
             .padding(.vertical, 8)
         }
         .padding(.horizontal)
+    }
+
+    private func loadDataPreview() {
+        isLoadingPreview = true
+        exporter.exportHealthDataRaw(for: selectedDate) { data in
+            DispatchQueue.main.async {
+                self.previewData = data
+                self.isLoadingPreview = false
+                self.showingDataPreview = true
+            }
+        }
     }
 
     // MARK: - Export Location
@@ -656,6 +694,195 @@ struct FolderPickerView: UIViewControllerRepresentable {
 
         func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
             onPicked(nil)
+        }
+    }
+}
+
+// MARK: - Data Preview View
+struct DataPreviewView: View {
+    @State private var data: [String: String]
+    @State private var currentDate: Date
+    @Environment(\.dismiss) private var dismiss
+    @State private var searchText = ""
+    @State private var isLoading = false
+    private let exporter = HealthDataExporter()
+
+    init(data: [String: String], date: Date) {
+        _data = State(initialValue: data)
+        _currentDate = State(initialValue: date)
+    }
+
+    // Categorized metrics for organized display
+    private let categories: [(name: String, icon: String, prefixes: [String])] = [
+        ("Sleep", "bed.double.fill", ["Sleep Analysis", "Bedtime", "Wake Time"]),
+        ("Activity", "figure.walk", ["Step Count", "Flights Climbed", "Walking", "Running", "Apple Exercise", "Apple Move", "Apple Stand", "Distance", "Push Count"]),
+        ("Heart", "heart.fill", ["Heart Rate", "Resting Heart", "Walking Heart"]),
+        ("Energy", "flame.fill", ["Active Energy", "Resting Energy", "Dietary Energy"]),
+        ("Body", "figure.arms.open", ["Weight", "Height", "Body Mass", "Body Fat", "Lean Body", "Waist"]),
+        ("Vitals", "waveform.path.ecg", ["Blood Pressure", "Blood Oxygen", "Blood Glucose", "Respiratory", "Body Temperature", "Basal Body"]),
+        ("Nutrition", "fork.knife", ["Protein", "Carbohydrates", "Fat", "Sugar", "Fiber", "Sodium", "Cholesterol", "Calcium", "Iron", "Vitamin", "Caffeine", "Water"]),
+        ("Other", "ellipsis.circle.fill", [])
+    ]
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                // Search bar
+                HStack {
+                    Image(systemName: "magnifyingglass")
+                        .foregroundColor(.secondary)
+                    TextField("Search metrics...", text: $searchText)
+                        .textFieldStyle(.plain)
+                    if !searchText.isEmpty {
+                        Button(action: { searchText = "" }) {
+                            Image(systemName: "xmark.circle.fill")
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .padding(10)
+                .background(Color(.systemGray6))
+                .cornerRadius(10)
+                .padding()
+
+                // Summary
+                HStack {
+                    Text("\(nonNullData.count) metrics with data")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text("\(data.count - nonNullData.count) empty")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 8)
+
+                Divider()
+
+                // Data list
+                List {
+                    ForEach(filteredCategories, id: \.name) { category in
+                        if !category.metrics.isEmpty {
+                            Section(header: Label(category.name, systemImage: category.icon)) {
+                                ForEach(category.metrics, id: \.key) { metric in
+                                    HStack {
+                                        Text(metric.key)
+                                            .font(.subheadline)
+                                            .lineLimit(2)
+                                        Spacer()
+                                        Text(formatValue(metric.value))
+                                            .font(.subheadline)
+                                            .fontWeight(.medium)
+                                            .foregroundColor(.primary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .listStyle(.insetGrouped)
+            }
+            .navigationTitle(formatDate(currentDate))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    HStack(spacing: 16) {
+                        Button(action: goToPreviousDay) {
+                            Image(systemName: "chevron.left")
+                        }
+                        .disabled(isLoading)
+
+                        Button(action: goToNextDay) {
+                            Image(systemName: "chevron.right")
+                        }
+                        .disabled(isLoading || Calendar.current.isDateInToday(currentDate))
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    if isLoading {
+                        ProgressView()
+                    } else {
+                        Button("Done") {
+                            dismiss()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var nonNullData: [String: String] {
+        data.filter { !$0.value.isEmpty }
+    }
+
+    private var filteredCategories: [(name: String, icon: String, metrics: [(key: String, value: String)])] {
+        categories.map { category in
+            let metrics: [(key: String, value: String)]
+            if category.prefixes.isEmpty {
+                // "Other" category - metrics that don't match any prefix
+                let allPrefixes = categories.flatMap { $0.prefixes }
+                metrics = nonNullData
+                    .filter { item in
+                        !allPrefixes.contains { prefix in item.key.hasPrefix(prefix) }
+                    }
+                    .filter { matchesSearch($0.key) }
+                    .sorted { $0.key < $1.key }
+                    .map { (key: $0.key, value: $0.value) }
+            } else {
+                metrics = nonNullData
+                    .filter { item in
+                        category.prefixes.contains { prefix in item.key.hasPrefix(prefix) }
+                    }
+                    .filter { matchesSearch($0.key) }
+                    .sorted { $0.key < $1.key }
+                    .map { (key: $0.key, value: $0.value) }
+            }
+            return (name: category.name, icon: category.icon, metrics: metrics)
+        }
+    }
+
+    private func matchesSearch(_ text: String) -> Bool {
+        searchText.isEmpty || text.localizedCaseInsensitiveContains(searchText)
+    }
+
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
+    }
+
+    private func formatValue(_ value: String) -> String {
+        guard let doubleValue = Double(value) else {
+            return value
+        }
+        // If it's a whole number, show without decimals
+        if doubleValue == floor(doubleValue) {
+            return String(format: "%.0f", doubleValue)
+        }
+        // Otherwise limit to 2 decimal places
+        return String(format: "%.2f", doubleValue)
+    }
+
+    private func goToPreviousDay() {
+        guard let newDate = Calendar.current.date(byAdding: .day, value: -1, to: currentDate) else { return }
+        loadData(for: newDate)
+    }
+
+    private func goToNextDay() {
+        guard let newDate = Calendar.current.date(byAdding: .day, value: 1, to: currentDate),
+              newDate <= Date() else { return }
+        loadData(for: newDate)
+    }
+
+    private func loadData(for date: Date) {
+        isLoading = true
+        exporter.exportHealthDataRaw(for: date) { newData in
+            DispatchQueue.main.async {
+                self.data = newData ?? [:]
+                self.currentDate = date
+                self.isLoading = false
+            }
         }
     }
 }
