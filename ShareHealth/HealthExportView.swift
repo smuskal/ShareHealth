@@ -459,7 +459,7 @@ struct HealthExportView: View {
             return
         }
 
-        // Save the face image to the Faces subfolder
+        // Save the face image to the faces/YYYY/MM subfolder
         guard folderURL.startAccessingSecurityScopedResource() else {
             errorMessage = "Cannot access the export folder. Please set the folder again."
             showingError = true
@@ -469,8 +469,11 @@ struct HealthExportView: View {
         }
         defer { folderURL.stopAccessingSecurityScopedResource() }
 
-        // Create Faces subfolder if it doesn't exist
-        let facesFolder = folderURL.appendingPathComponent("Faces", isDirectory: true)
+        // Create faces/YYYY/MM subfolder structure
+        let yearMonthPath = formatYearMonth(selectedDate)
+        let facesFolder = folderURL
+            .appendingPathComponent("faces", isDirectory: true)
+            .appendingPathComponent(yearMonthPath, isDirectory: true)
         do {
             if !FileManager.default.fileExists(atPath: facesFolder.path) {
                 try FileManager.default.createDirectory(at: facesFolder, withIntermediateDirectories: true)
