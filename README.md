@@ -8,7 +8,7 @@ An iOS app for exporting Apple Health data to CSV files with optional face image
 Export 100+ Apple Health metrics to CSV format, including:
 - **Activity**: Steps, flights climbed, exercise time, distances
 - **Heart**: Heart rate (min/max/avg), resting HR, HRV, walking HR
-- **Sleep**: Total, asleep, in bed, core, deep, REM, awake durations, **bedtime, wake time**
+- **Sleep**: Total, asleep, **time in bed**, core, deep, REM, awake durations, **bedtime** (decimal hours), **wake time** (decimal hours)
 - **Vitals**: Blood pressure, body temperature, blood glucose, respiratory rate
 - **Body**: Weight, height, BMI, body fat percentage, lean mass
 - **Nutrition**: Calories, macros, vitamins, minerals (20+ nutrients)
@@ -16,17 +16,24 @@ Export 100+ Apple Health metrics to CSV format, including:
 - **Other**: Mindful minutes, handwashing, stand hours, and more
 
 ### Sleep Timing for Analytics
-Bedtime and Wake Time are exported as **decimal hours** (e.g., 22.75 for 10:45 PM, 6.5 for 6:30 AM) for easy use in machine learning models and data analysis.
+Bedtime and Wake Time are exported as **decimal hours** (24-hour format) for easy use in machine learning models and data analysis:
+- **Bedtime**: Earliest sleep session start time (e.g., 22.75 = 10:45 PM)
+- **Wake Time**: Latest asleep sample end time before 6 PM (e.g., 6.5 = 6:30 AM)
+- **Time in Bed**: Total hours spent in bed (separate from asleep time)
+
+This format is designed for predictive analytics and health trend modeling.
 
 ### Historical Export (Date Range)
-Export health data for any date range with a single operation:
-- Select start and end dates
-- **Automatic earliest date detection** - shows the earliest available health data in your HealthKit
-- Exports one CSV file per day
-- Progress tracking with day-by-day status
-- **View Log** feature to see export details and any failed days
-- Screen stays awake during export to prevent interruption
-- 30-second timeout per day to handle stuck queries gracefully
+Export health data for any date range with a single batch operation:
+- Select custom start and end dates
+- **Automatic earliest date detection** - displays your earliest available HealthKit data with a "Use" button
+- Exports one CSV file per day containing all 100+ health metrics
+- Real-time progress tracking showing current day being exported
+- **View Log** feature to review export details, timing, and any failed days
+- **Screen stays awake** during export to prevent interruption on long exports
+- **30-second timeout per day** to gracefully handle stuck HealthKit queries
+- Continues to next day on failure (doesn't abort entire export)
+- Separate folder selection from single-day exports for organization
 
 ### Organized Folder Structure
 All exports are organized into year/month subfolders:
@@ -132,10 +139,12 @@ Example columns:
 Date/Time, Active Energy (kcal), Step Count (count), Heart Rate [Avg] (count/min), Sleep Analysis [Total] (hr), Bedtime, Wake Time, ...
 ```
 
-**Sleep Timing Format:**
-- Bedtime and Wake Time are in decimal hours (24-hour format)
-- Example: `22.75` = 10:45 PM, `6.5` = 6:30 AM
-- Designed for machine learning and predictive analytics
+**Sleep Data Fields:**
+- `Sleep Analysis [In Bed] (hr)`: Hours spent in bed (may differ from asleep time)
+- `Bedtime`: Decimal hour when sleep session started (24-hour format)
+- `Wake Time`: Decimal hour when final sleep ended (morning wake-up)
+- Example values: `22.75` = 10:45 PM, `6.5` = 6:30 AM
+- Optimized for machine learning, predictive analytics, and sleep pattern analysis
 
 ## Project Structure
 
@@ -179,7 +188,8 @@ This app:
 
 ## Version History
 
-- **3.0** - Historical export (date range), bedtime/wake time fields, year/month folder organization, export logging, earliest date detection
+- **3.0 (Build 3)** - Historical export with date range selection, bedtime/wake time fields as decimal hours for ML/analytics, time in bed tracking, year/month folder organization, export logging with View Log feature, automatic earliest available date detection, 30-second per-day timeout protection, screen stays awake during batch exports
+- **3.0 (Build 2)** - Initial 3.0 release with historical export foundation
 - **2.1** - Added face imagery capture, health export improvements
 - **2.0** - Added comprehensive health data export (70+ metrics)
 - **1.x** - Original ShareSteps functionality
