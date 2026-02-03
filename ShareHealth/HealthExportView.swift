@@ -705,6 +705,7 @@ struct DataPreviewView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var searchText = ""
     @State private var isLoading = false
+    @State private var showingDatePicker = false
     private let exporter = HealthDataExporter()
 
     init(data: [String: String], date: Date) {
@@ -783,13 +784,23 @@ struct DataPreviewView: View {
                 }
                 .listStyle(.insetGrouped)
             }
-            .navigationTitle(formatDate(currentDate))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
+                ToolbarItem(placement: .principal) {
                     HStack(spacing: 16) {
                         Button(action: goToPreviousDay) {
                             Image(systemName: "chevron.left")
+                        }
+                        .disabled(isLoading)
+
+                        Button(action: { showingDatePicker = true }) {
+                            HStack(spacing: 4) {
+                                Text(formatDate(currentDate))
+                                    .fontWeight(.semibold)
+                                Image(systemName: "calendar")
+                                    .font(.caption)
+                            }
+                            .foregroundColor(.primary)
                         }
                         .disabled(isLoading)
 
@@ -808,6 +819,14 @@ struct DataPreviewView: View {
                         }
                     }
                 }
+            }
+            .sheet(isPresented: $showingDatePicker) {
+                DatePickerSheet(selectedDate: currentDate, onDateSelected: { newDate in
+                    showingDatePicker = false
+                    if newDate != currentDate {
+                        loadData(for: newDate)
+                    }
+                })
             }
         }
     }
@@ -884,6 +903,52 @@ struct DataPreviewView: View {
                 self.isLoading = false
             }
         }
+    }
+}
+
+// MARK: - Date Picker Sheet
+struct DatePickerSheet: View {
+    let selectedDate: Date
+    let onDateSelected: (Date) -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var pickerDate: Date
+
+    init(selectedDate: Date, onDateSelected: @escaping (Date) -> Void) {
+        self.selectedDate = selectedDate
+        self.onDateSelected = onDateSelected
+        _pickerDate = State(initialValue: selectedDate)
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack {
+                DatePicker(
+                    "Select Date",
+                    selection: $pickerDate,
+                    in: ...Date(),
+                    displayedComponents: [.date]
+                )
+                .datePickerStyle(.graphical)
+                .padding()
+
+                Spacer()
+            }
+            .navigationTitle("Select Date")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Select") {
+                        onDateSelected(pickerDate)
+                    }
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 
