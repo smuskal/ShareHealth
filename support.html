@@ -40,13 +40,19 @@
             border-left: 4px solid #27ae60;
             margin: 15px 0;
         }
+        code {
+            background-color: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
     </style>
 </head>
 <body>
     <h1>ShareHealth Support</h1>
 
     <div class="new-feature">
-        <strong>New in Version 3.0:</strong> ShareHealth now exports all your Apple Health data to CSV, includes optional face imagery with exports, and continues to support step sharing with friends.
+        <strong>New in Version 3.0:</strong> Historical export for date ranges, bedtime/wake time tracking, organized year/month folder structure, and export logging.
     </div>
 
     <h2>Getting Started</h2>
@@ -59,7 +65,7 @@
         </ol>
     </div>
 
-    <h2>Exporting Health Data</h2>
+    <h2>Exporting Health Data (Single Day)</h2>
     <ol>
         <li>Open ShareHealth</li>
         <li>Tap "Export Health Data"</li>
@@ -67,19 +73,53 @@
         <li>Choose your export location (Dropbox, iCloud, or any folder)</li>
         <li>Optionally set a default folder for one-tap exports</li>
         <li>Tap "Export to Default Folder" or "Export to Other Location..."</li>
-        <li>Your health metrics will be saved as a CSV file</li>
+        <li>Your health metrics will be saved as a CSV file in a <code>YYYY/MM/</code> subfolder</li>
     </ol>
 
     <div class="tip">
         <strong>Tip:</strong> Set a default export location for quick one-tap exports. Perfect for regular health tracking!
     </div>
 
+    <h2>Historical Export (Date Range)</h2>
+    <p>Export weeks, months, or years of health data at once:</p>
+    <ol>
+        <li>Open ShareHealth</li>
+        <li>Tap "Historical Export"</li>
+        <li>The app shows your <strong>earliest available health data date</strong></li>
+        <li>Select your start date (tap "Use" to start from earliest available)</li>
+        <li>Select your end date</li>
+        <li>Choose an export folder</li>
+        <li>Tap "Export X Days"</li>
+        <li>Monitor progress as each day is exported</li>
+        <li>When complete, tap "View Log" to see details</li>
+    </ol>
+
+    <div class="tip">
+        <strong>Tip:</strong> The screen stays awake during export to prevent interruption. For large exports (years of data), keep your iPhone plugged in.
+    </div>
+
+    <h2>File Organization</h2>
+    <p>All exports are automatically organized into year and month subfolders:</p>
+    <pre>
+/ExportFolder/
+  /2024/
+    /01/
+      HealthMetrics-2024-01-01.csv
+      HealthMetrics-2024-01-02.csv
+    /02/
+      HealthMetrics-2024-02-01.csv
+  /faces/
+    /2024/
+      /01/
+        Face-2024-01-15_143022.jpg
+    </pre>
+
     <h2>Face Imagery Feature</h2>
     <p>Associate your face with your health exports so recipients can easily identify whose data they're viewing.</p>
     <ol>
         <li>On the Export Health Data screen, toggle "Include Face Imagery"</li>
-        <li>When prompted, take a selfie or choose an existing photo</li>
-        <li>Your photo will be included with your health data export</li>
+        <li>When prompted, take a selfie</li>
+        <li>Your photo will be saved to <code>faces/YYYY/MM/</code> subfolder</li>
         <li>The image is stored locally on your device</li>
     </ol>
 
@@ -92,12 +132,19 @@
     <ul>
         <li>Activity (steps, distance, flights climbed)</li>
         <li>Heart rate and heart rate variability</li>
-        <li>Sleep analysis and sleep stages</li>
+        <li>Sleep analysis, sleep stages, <strong>bedtime, and wake time</strong></li>
         <li>Nutrition (calories, macros, vitamins)</li>
         <li>Body measurements (weight, height, BMI)</li>
         <li>Vitals (blood pressure, respiratory rate)</li>
         <li>Workouts and exercise minutes</li>
         <li>And many more...</li>
+    </ul>
+
+    <h3>Bedtime and Wake Time</h3>
+    <p>Sleep timing is exported in <strong>decimal hours</strong> for use in data analysis and machine learning:</p>
+    <ul>
+        <li><code>22.75</code> = 10:45 PM</li>
+        <li><code>6.5</code> = 6:30 AM</li>
     </ul>
 
     <h2>Sharing Your Steps</h2>
@@ -128,16 +175,31 @@
     <h2>Features</h2>
     <ul>
         <li>Export 100+ health metrics to CSV</li>
+        <li>Historical export for any date range</li>
+        <li>Automatic earliest health data date detection</li>
+        <li>Organized year/month folder structure</li>
+        <li>Export logging with View Log feature</li>
         <li>Save exports to Dropbox, iCloud, or any folder</li>
         <li>Set a default export location for one-tap saving</li>
         <li>Include face imagery with exports for easy identification</li>
+        <li>Bedtime and wake time in decimal hours for analytics</li>
         <li>Select any date to view or share steps</li>
         <li>Choose specific time ranges for step sharing</li>
         <li>Add notes to your shared steps</li>
         <li>View hourly breakdown of steps</li>
-        <li>Swipe left/right to change dates</li>
         <li>Visual graph of your step activity</li>
     </ul>
+
+    <h2>Troubleshooting</h2>
+
+    <h3>Historical export seems to stop mid-way</h3>
+    <p>Keep the app in the foreground during export. The screen stays awake automatically. After completion, tap "View Log" to see which days succeeded or failed.</p>
+
+    <h3>Files not appearing in Dropbox</h3>
+    <p>Files are written to Dropbox's local cache first, then uploaded to the cloud in the background. Check the Files app &rarr; Dropbox to see local files. Keep the Dropbox app open to speed up uploads.</p>
+
+    <h3>No sleep data for older years</h3>
+    <p>Native Apple sleep tracking started in September 2020 (iOS 14). Sleep data before that date requires third-party apps like Sleep Cycle or AutoSleep. Your CSVs will still export other metrics; sleep fields will simply be empty.</p>
 
     <h2>Common Questions</h2>
 
@@ -145,22 +207,16 @@
     <p>Health data is exported as a CSV (comma-separated values) file, which can be opened in Excel, Google Sheets, Numbers, or any spreadsheet application.</p>
 
     <h3>Where is my face photo stored?</h3>
-    <p>Your face photo is stored locally on your device only. It is never uploaded to any server and is only included when you choose to export your health data.</p>
+    <p>Your face photo is stored locally on your device in the <code>faces/YYYY/MM/</code> subfolder. It is never uploaded to any server and is only included when you choose to export.</p>
 
-    <h3>Can I share steps from multiple days?</h3>
-    <p>Currently, ShareHealth allows sharing one day at a time. Select the specific day you want to share.</p>
-
-    <h3>Will importing shared steps affect my existing step data?</h3>
-    <p>No, importing shared steps adds to your Apple Health data without affecting existing records.</p>
-
-    <h3>Can I edit or delete imported steps?</h3>
-    <p>You can manage all step data through the Apple Health app.</p>
-
-    <h3>Why isn't my step count updating?</h3>
-    <p>Try switching dates or reopening the app. Make sure Apple Health access is enabled in your device settings.</p>
+    <h3>Can I export multiple days at once?</h3>
+    <p>Yes! Use the "Historical Export" feature to export any date range. Each day creates a separate CSV file, organized by year and month.</p>
 
     <h3>How do I change my default export folder?</h3>
     <p>On the Export Health Data screen, tap "Change" next to the export location to select a new default folder.</p>
+
+    <h3>What do the Bedtime and Wake Time numbers mean?</h3>
+    <p>They are in decimal hours (24-hour format). For example, 22.5 means 10:30 PM, and 7.25 means 7:15 AM. This format is designed for data analysis and machine learning.</p>
 
     <div class="tip">
         <strong>Remember:</strong> ShareHealth requires Apple Health access to read and write health data. You can check this in your iPhone's Settings &rarr; Privacy & Security &rarr; Health.
@@ -171,7 +227,7 @@
 
     <h2>App Requirements</h2>
     <ul>
-        <li>iOS 15.0 or later</li>
+        <li>iOS 18.0 or later</li>
         <li>iPhone with Apple Health capability</li>
         <li>Internet connection for sharing features</li>
     </ul>
