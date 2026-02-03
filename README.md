@@ -1,10 +1,22 @@
 # ShareHealth
 
+<p align="center">
+  <img src="icon.png" alt="ShareHealth Icon" width="128" height="128">
+</p>
+
 [![Available on the App Store](https://img.shields.io/badge/App%20Store-Available-blue?logo=apple)](https://apps.apple.com/us/app/sharehealth/id6738940089)
 
 An iOS app for exporting Apple Health data to CSV files with optional face imagery tracking.
 
 **[Download on the App Store](https://apps.apple.com/us/app/sharehealth/id6738940089)**
+
+## Screenshots
+
+<p align="center">
+  <img src="AppStoreScreenshots/screenshot-5.png" alt="Main Menu" width="200">
+  <img src="AppStoreScreenshots/screenshot-4.png" alt="Health Export" width="200">
+  <img src="AppStoreScreenshots/screenshot-1.png" alt="Share Steps" width="200">
+</p>
 
 ## Features
 
@@ -182,13 +194,6 @@ This app:
 | HealthKit (Write) | Save imported step data from friends |
 | Camera | Capture face photos (optional) |
 | File Access | Save exports to selected folder |
-
-## Building for Release
-
-1. In Xcode, select **Product > Archive**
-2. In the Organizer, click **Distribute App**
-3. Choose **App Store Connect** for TestFlight/App Store
-4. Or choose **Ad Hoc** for direct installation
 
 ## Version History
 
