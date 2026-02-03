@@ -1,6 +1,10 @@
 # ShareHealth
 
+[![Available on the App Store](https://img.shields.io/badge/App%20Store-Available-blue?logo=apple)](https://apps.apple.com/us/app/sharehealth/id6738940089)
+
 An iOS app for exporting Apple Health data to CSV files with optional face imagery tracking.
+
+**[Download on the App Store](https://apps.apple.com/us/app/sharehealth/id6738940089)**
 
 ## Features
 
