@@ -798,6 +798,7 @@ class HealthDataExporter: ObservableObject {
                 }
 
                 // Wake Time: latest end time of Asleep samples (Core, Deep, REM, or Unspecified)
+                // Only consider samples ending before 6 PM to exclude evening segments from the next night's sleep
                 let asleepCategories: Set<Int> = [
                     HKCategoryValueSleepAnalysis.asleepCore.rawValue,
                     HKCategoryValueSleepAnalysis.asleepDeep.rawValue,
@@ -806,6 +807,12 @@ class HealthDataExporter: ObservableObject {
                 ]
                 let wakeTime = taggedIntervals
                     .filter { asleepCategories.contains($0.category) }
+                    .filter { interval in
+                        // Only include samples ending before 6 PM (18:00) to get morning wake times
+                        // This excludes pre-midnight segments from tonight's new sleep session
+                        let hour = calendar.component(.hour, from: interval.end)
+                        return hour < 18
+                    }
                     .map { $0.end }
                     .max()
                 if let wakeTime = wakeTime {
