@@ -13,9 +13,14 @@ An iOS app for exporting Apple Health data to CSV files with optional face image
 ## Screenshots
 
 <p align="center">
-  <img src="AppStoreScreenshots/screenshot-5.png" alt="Main Menu" width="200">
-  <img src="AppStoreScreenshots/screenshot-4.png" alt="Health Export" width="200">
-  <img src="AppStoreScreenshots/screenshot-1.png" alt="Share Steps" width="200">
+  <img src="AppStoreScreenshots/screenshot-5.png" alt="Main Menu" width="180">
+  <img src="AppStoreScreenshots/screenshot-4.png" alt="Health Export" width="180">
+  <img src="AppStoreScreenshots/screenshot-6.png" alt="Face Imagery Option" width="180">
+</p>
+<p align="center">
+  <img src="AppStoreScreenshots/screenshot-1.png" alt="Share Steps" width="180">
+  <img src="AppStoreScreenshots/screenshot-2.png" alt="Share Message" width="180">
+  <img src="AppStoreScreenshots/screenshot-3.png" alt="Import Steps" width="180">
 </p>
 
 ## Features
