@@ -66,6 +66,10 @@ struct ShareStepsApp: App {
             }
             .onAppear {
                 print("\n🚀 [APP] App appearing")
+
+                // Clean up temp files from previous sessions
+                cleanupTempFiles()
+
                 NotificationCenter.default.addObserver(
                     forName: .handleIncomingURL,
                     object: nil,
@@ -208,6 +212,41 @@ struct ShareStepsApp: App {
                 alert.addAction(UIAlertAction(title: "OK", style: .default))
                 rootVC.present(alert, animated: true)
             }
+        }
+    }
+
+    /// Cleans up temporary files from previous sessions (CSVs and JSONs)
+    private func cleanupTempFiles() {
+        let tempDirectory = FileManager.default.temporaryDirectory
+        let fileManager = FileManager.default
+
+        do {
+            let tempFiles = try fileManager.contentsOfDirectory(
+                at: tempDirectory,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )
+
+            var deletedCount = 0
+            for fileURL in tempFiles {
+                let fileExtension = fileURL.pathExtension.lowercased()
+                // Clean up CSV files (health exports) and JSON files (SharedSteps)
+                if fileExtension == "csv" || fileExtension == "json" {
+                    try fileManager.removeItem(at: fileURL)
+                    deletedCount += 1
+                    print("🧹 [CLEANUP] Deleted temp file: \(fileURL.lastPathComponent)")
+                }
+            }
+
+            if deletedCount > 0 {
+                print("🧹 [CLEANUP] Cleaned up \(deletedCount) temp file(s)")
+            } else {
+                print("🧹 [CLEANUP] No temp files to clean up")
+            }
+        } catch {
+            // This is fine - temp directory might be empty or inaccessible
+            // Fresh installs will have an empty temp directory
+            print("🧹 [CLEANUP] Temp cleanup skipped: \(error.localizedDescription)")
         }
     }
 }
