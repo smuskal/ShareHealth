@@ -20,6 +20,8 @@ struct HealthExportView: View {
     @State private var showingFaceCapture = false
     @State private var pendingExportURL: URL? = nil
     @State private var showingCameraPermissionAlert = false
+    @State private var isShareSheetExport = false
+    @State private var capturedImageForSharing: UIImage? = nil
 
     // Data preview feature
     @State private var showingDataPreview = false
@@ -459,6 +461,8 @@ struct HealthExportView: View {
 
                 // Store the pending export URL
                 self.pendingExportURL = tempURL
+                self.isShareSheetExport = false
+                self.capturedImageForSharing = nil
 
                 // If face imagery is enabled, show camera first
                 if self.includeFaceImagery {
@@ -492,6 +496,14 @@ struct HealthExportView: View {
     }
 
     private func handleFaceCaptured(_ image: UIImage) {
+        // If this is a share sheet export, store the image and complete the share sheet flow
+        if isShareSheetExport {
+            capturedImageForSharing = image
+            completeShareSheetExport()
+            return
+        }
+
+        // For default folder export, save the face image to disk
         guard let folderURL = defaultFolderURL else {
             completePendingExport()
             return
@@ -553,6 +565,8 @@ struct HealthExportView: View {
             try? FileManager.default.removeItem(at: tempURL)
         }
         pendingExportURL = nil
+        isShareSheetExport = false
+        capturedImageForSharing = nil
         // No success message - export was cancelled
     }
 
@@ -601,14 +615,55 @@ struct HealthExportView: View {
                 if let error = error {
                     self.errorMessage = error
                     self.showingError = true
-                } else if let url = url {
-                    self.presentShareSheet(with: url)
+                    return
+                }
+
+                guard let url = url else {
+                    self.errorMessage = "Failed to generate CSV"
+                    self.showingError = true
+                    return
+                }
+
+                // Store the pending export URL
+                self.pendingExportURL = url
+                self.isShareSheetExport = true
+                self.capturedImageForSharing = nil
+
+                // If face imagery is enabled, show camera first
+                if self.includeFaceImagery {
+                    self.checkCameraPermissionAndShowCapture()
+                } else {
+                    self.completeShareSheetExport()
                 }
             }
         }
     }
 
-    private func presentShareSheet(with url: URL) {
+    private func completeShareSheetExport() {
+        guard let csvURL = pendingExportURL else {
+            pendingExportURL = nil
+            isShareSheetExport = false
+            capturedImageForSharing = nil
+            return
+        }
+
+        // Build the list of items to share
+        var itemsToShare: [Any] = [csvURL]
+
+        // Add the captured image if available
+        if let image = capturedImageForSharing {
+            itemsToShare.append(image)
+        }
+
+        presentShareSheet(with: itemsToShare)
+
+        // Clean up
+        pendingExportURL = nil
+        isShareSheetExport = false
+        capturedImageForSharing = nil
+    }
+
+    private func presentShareSheet(with items: [Any]) {
         guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
               let rootViewController = windowScene.windows.first?.rootViewController else {
             errorMessage = "Could not present share sheet"
@@ -621,7 +676,7 @@ struct HealthExportView: View {
             topController = presented
         }
 
-        let activityVC = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
 
         activityVC.completionWithItemsHandler = { _, completed, _, _ in
             if completed {
