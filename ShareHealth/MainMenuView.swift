@@ -50,6 +50,12 @@ struct MainMenuView: View {
 
                 Spacer()
                 Spacer()
+
+                // Version number
+                Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown")")
+                    .font(.caption)
+                    .foregroundColor(.gray.opacity(0.5))
+                    .padding(.bottom, 20)
             }
             .navigationBarHidden(true)
         }

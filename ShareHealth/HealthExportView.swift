@@ -16,7 +16,7 @@ struct HealthExportView: View {
     @State private var defaultFolderName: String = ""
 
     // Face imagery feature
-    @State private var includeFaceImagery = UserDefaults.standard.bool(forKey: "includeFaceImagery")
+    @AppStorage("includeFaceImagery") private var includeFaceImagery = false
     @State private var showingFaceCapture = false
     @State private var pendingExportURL: URL? = nil
     @State private var showingCameraPermissionAlert = false
@@ -374,9 +374,6 @@ struct HealthExportView: View {
                 }
             }
             .toggleStyle(SwitchToggleStyle(tint: .green))
-            .onChange(of: includeFaceImagery) { _, newValue in
-                UserDefaults.standard.set(newValue, forKey: "includeFaceImagery")
-            }
         }
         .padding(.horizontal)
     }
