@@ -185,6 +185,7 @@ ShareHealth/
 ## Privacy
 
 This app:
+- **No account required** - just download and use
 - Reads health data locally from Apple HealthKit
 - Does not transmit health data to any external servers
 - Stores exports only where you choose to save them
@@ -228,6 +229,13 @@ This app:
 - Native Apple sleep tracking started in September 2020 (iOS 14)
 - Earlier sleep data requires third-party apps (Sleep Cycle, AutoSleep, etc.)
 - CSVs will still export with other metrics; sleep fields will be empty
+
+## Links
+
+- [Download on the App Store](https://apps.apple.com/us/app/sharehealth/id6738940089)
+- [Website](https://www.molseek.com/sharehealth)
+- [AI Steve Deep Dive (Medium)](https://medium.com/@smuskal/ai-steve-deep-dive-9f8352bc544d)
+- [AI Steve Deep Dive (Substack)](https://www.drstevenmuskal.com/p/ai-steve-deep-dive)
 
 ## License
 
