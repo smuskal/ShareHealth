@@ -13,14 +13,14 @@ An iOS app for exporting Apple Health data to CSV files with optional face image
 ## Screenshots
 
 <p align="center">
-  <img src="AppStoreScreenshots/screenshot-5.png" alt="Main Menu" width="180">
-  <img src="AppStoreScreenshots/screenshot-4.png" alt="Health Export" width="180">
-  <img src="AppStoreScreenshots/screenshot-6.png" alt="Face Imagery Option" width="180">
+  <img src="AppStoreScreenshots/1-screenshot.png" alt="Main Menu" width="180">
+  <img src="AppStoreScreenshots/2-screenshot.png" alt="Health Export" width="180">
+  <img src="AppStoreScreenshots/3-screenshot.png" alt="Historical Export" width="180">
 </p>
 <p align="center">
-  <img src="AppStoreScreenshots/screenshot-1.png" alt="Share Steps" width="180">
-  <img src="AppStoreScreenshots/screenshot-2.png" alt="Share Message" width="180">
-  <img src="AppStoreScreenshots/screenshot-3.png" alt="Import Steps" width="180">
+  <img src="AppStoreScreenshots/4-screenshot.png" alt="Share Steps" width="180">
+  <img src="AppStoreScreenshots/5-screenshot.png" alt="Share Message" width="180">
+  <img src="AppStoreScreenshots/6-screenshot.png" alt="Import Steps" width="180">
 </p>
 
 ## Features
@@ -104,8 +104,8 @@ Share your daily step counts with friends via URL scheme.
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/smuskal/ExportHealth.git
-   cd ExportHealth
+   git clone https://github.com/smuskal/ShareHealth.git
+   cd ShareHealth
    ```
 
 2. Open in Xcode:
@@ -231,7 +231,7 @@ This app:
 
 ## License
 
-Private repository. All rights reserved.
+MIT License - See [LICENSE](LICENSE) for details.
 
 ## Acknowledgments
 
