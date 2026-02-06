@@ -388,7 +388,13 @@ class HealthDataExporter: ObservableObject {
             typesToRead.insert(standHourType)
         }
 
-        healthStore.requestAuthorization(toShare: nil, read: typesToRead) { success, error in
+        // Request write permission for Steps (needed for SharedSteps import feature)
+        var typesToWrite: Set<HKSampleType> = []
+        if let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) {
+            typesToWrite.insert(stepType)
+        }
+
+        healthStore.requestAuthorization(toShare: typesToWrite, read: typesToRead) { success, error in
             DispatchQueue.main.async {
                 if let error = error {
                     print("Authorization error: \(error.localizedDescription)")

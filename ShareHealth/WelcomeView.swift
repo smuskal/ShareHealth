@@ -27,7 +27,7 @@ struct WelcomeView: View {
                     .font(.headline)
                     .padding(.bottom, 4)
 
-                HStack { Image(systemName: "figure.walk").foregroundColor(.blue); Text("Activity & Steps") }
+                HStack { Image(systemName: "figure.walk").foregroundColor(.blue); Text("Activity & Steps (read & write)") }
                 HStack { Image(systemName: "heart.fill").foregroundColor(.red); Text("Heart Rate & Vitals") }
                 HStack { Image(systemName: "bed.double.fill").foregroundColor(.purple); Text("Sleep Analysis") }
                 HStack { Image(systemName: "fork.knife").foregroundColor(.orange); Text("Nutrition Data") }
@@ -38,6 +38,12 @@ struct WelcomeView: View {
             .background(Color(.systemGray6))
             .cornerRadius(12)
             .padding(.horizontal)
+
+            Text("Important: Enable both READ and WRITE for Steps to share and receive step data with friends.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
 
             if isRequesting {
                 ProgressView()

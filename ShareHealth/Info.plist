@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSHealthShareUsageDescription</key>
+	<string>ShareHealth needs to read your health data to export and share your activity, steps, heart rate, sleep, and other health metrics.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>ShareHealth needs to write step data to Apple Health so you can import steps shared by friends and family.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>ShareHealth uses the camera to capture a face photo with your health data exports, helping you track your appearance alongside your health metrics.</string>
 	<key>CFBundleURLTypes</key>

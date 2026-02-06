@@ -16,6 +16,9 @@ struct ShareStepsApp: App {
     @State private var pendingImportData: PendingImportData?
     @State private var showingError = false
     @State private var errorMessage = ""
+    @State private var showingPermissionAlert = false
+    @State private var showingSuccess = false
+    @State private var successMessage = ""
     @State private var shouldFetchHealthData = true
     @StateObject private var healthKitManager = HealthKitManager.shared
     @State private var pendingURL: URL?
@@ -63,6 +66,16 @@ struct ShareStepsApp: App {
                 Button("OK", role: .cancel) { }
             } message: {
                 Text(errorMessage)
+            }
+            .alert("Health Access Required", isPresented: $showingPermissionAlert) {
+                Button("OK") { }
+            } message: {
+                Text("ShareHealth needs write permission for Steps.\n\nTo enable:\n1. Open the Settings app\n2. Scroll down and tap 'Health'\n3. Tap 'Data Access & Devices'\n4. Tap 'ShareHealth'\n5. Turn on Steps under 'Write Data'")
+            }
+            .alert("Success", isPresented: $showingSuccess) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text(successMessage)
             }
             .onAppear {
                 print("\n🚀 [APP] App appearing")
@@ -191,27 +204,20 @@ struct ShareStepsApp: App {
 
     private func showError(_ message: String) {
         DispatchQueue.main.async {
-            self.errorMessage = message
-            self.showingError = true
+            // Check if this is a write permission error
+            if message.contains("Write permission denied") || message.contains("Not authorized") {
+                self.showingPermissionAlert = true
+            } else {
+                self.errorMessage = message
+                self.showingError = true
+            }
         }
     }
 
     private func showSuccessAlert(message: String) {
         DispatchQueue.main.async {
-            if let rootVC = UIApplication.shared.connectedScenes
-                .compactMap({ $0 as? UIWindowScene })
-                .first?
-                .windows
-                .first?
-                .rootViewController {
-                let alert = UIAlertController(
-                    title: "Success",
-                    message: message,
-                    preferredStyle: .alert
-                )
-                alert.addAction(UIAlertAction(title: "OK", style: .default))
-                rootVC.present(alert, animated: true)
-            }
+            self.successMessage = message
+            self.showingSuccess = true
         }
     }
 

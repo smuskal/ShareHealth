@@ -151,15 +151,21 @@ class StepManager: ObservableObject {
                 let totalSteps = steps.values.reduce(0, +)
                 print("✅ [MODIFY] Successfully wrote step data")
                 print("   Total steps: \(totalSteps)")
-                
+
                 // Add delay before completion to ensure data is fully available
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                     completion(true, "Successfully added \(totalSteps) steps")
                 }
             } else {
-                print("❌ [MODIFY] Failed to write data: \(error?.localizedDescription ?? "Unknown error")")
+                let errorDesc = error?.localizedDescription ?? "Unknown error"
+                print("❌ [MODIFY] Failed to write data: \(errorDesc)")
                 DispatchQueue.main.async {
-                    completion(false, "Failed to add steps")
+                    // Check if this is an authorization error
+                    if errorDesc.contains("Not authorized") || errorDesc.contains("authorization") {
+                        completion(false, "Write permission denied")
+                    } else {
+                        completion(false, "Failed to add steps: \(errorDesc)")
+                    }
                 }
             }
         }
