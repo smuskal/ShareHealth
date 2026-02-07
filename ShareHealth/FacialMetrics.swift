@@ -2,64 +2,153 @@ import Foundation
 
 // MARK: - Main Facial Metrics Container
 
-/// Complete facial analysis results combining Vision and ARKit data
+/// Complete facial analysis results using MediaPipe
 struct FacialMetrics: Codable {
     let captureTimestamp: Date
     let analysisVersion: String
     let analysisMode: AnalysisMode
+    let mediapipeFeatures: MediaPipeFeatures
     let healthIndicators: FacialHealthIndicators
-    let visionMetrics: VisionFaceMetrics?
-    let arkitMetrics: ARKitFaceMetrics?
+    let metadata: CaptureMetadata
 
     static let currentVersion = "1.0"
 
     init(
         captureTimestamp: Date = Date(),
-        analysisMode: AnalysisMode,
+        analysisMode: AnalysisMode = .mediapipe,
+        mediapipeFeatures: MediaPipeFeatures,
         healthIndicators: FacialHealthIndicators,
-        visionMetrics: VisionFaceMetrics? = nil,
-        arkitMetrics: ARKitFaceMetrics? = nil
+        metadata: CaptureMetadata
     ) {
         self.captureTimestamp = captureTimestamp
         self.analysisVersion = Self.currentVersion
         self.analysisMode = analysisMode
+        self.mediapipeFeatures = mediapipeFeatures
         self.healthIndicators = healthIndicators
-        self.visionMetrics = visionMetrics
-        self.arkitMetrics = arkitMetrics
+        self.metadata = metadata
     }
 }
 
 // MARK: - Analysis Mode
 
 enum AnalysisMode: String, Codable {
-    case visionOnly = "visionOnly"
-    case visionAndARKit = "visionAndARKit"
+    case mediapipe = "mediapipe"
+    case mediapipeBackfill = "mediapipeBackfill"
     case none = "none"
+}
+
+// MARK: - MediaPipe Features (22 features)
+
+/// Features derived from MediaPipe Face Mesh 478 landmarks
+struct MediaPipeFeatures: Codable {
+    // Eye metrics (0-1 scale)
+    let eyeBlinkLeft: Double
+    let eyeBlinkRight: Double
+    let eyeOpennessLeft: Double
+    let eyeOpennessRight: Double
+    let eyeSquintLeft: Double
+    let eyeSquintRight: Double
+
+    // Brow metrics (0-1 scale)
+    let browRaiseLeft: Double
+    let browRaiseRight: Double
+    let browFurrow: Double
+
+    // Mouth metrics (0-1 scale)
+    let smileLeft: Double
+    let smileRight: Double
+    let frownLeft: Double
+    let frownRight: Double
+    let mouthOpen: Double
+    let mouthPucker: Double
+    let lipPress: Double
+
+    // Jaw metrics (0-1 scale)
+    let jawOpen: Double
+    let jawLeft: Double
+    let jawRight: Double
+
+    // Cheek metrics (0-1 scale)
+    let cheekSquintLeft: Double
+    let cheekSquintRight: Double
+
+    // Head pose (degrees)
+    let headPitch: Double
+    let headYaw: Double
+    let headRoll: Double
+
+    // MARK: - Computed Properties
+
+    var averageEyeOpenness: Double {
+        (eyeOpennessLeft + eyeOpennessRight) / 2.0
+    }
+
+    var averageEyeBlink: Double {
+        (eyeBlinkLeft + eyeBlinkRight) / 2.0
+    }
+
+    var averageSmile: Double {
+        (smileLeft + smileRight) / 2.0
+    }
+
+    var averageFrown: Double {
+        (frownLeft + frownRight) / 2.0
+    }
+
+    var averageBrowRaise: Double {
+        (browRaiseLeft + browRaiseRight) / 2.0
+    }
+
+    var eyeSymmetry: Double {
+        1.0 - abs(eyeOpennessLeft - eyeOpennessRight)
+    }
+
+    var smileSymmetry: Double {
+        1.0 - abs(smileLeft - smileRight)
+    }
+
+    var browSymmetry: Double {
+        1.0 - abs(browRaiseLeft - browRaiseRight)
+    }
+
+    static let empty = MediaPipeFeatures(
+        eyeBlinkLeft: 0, eyeBlinkRight: 0,
+        eyeOpennessLeft: 0.5, eyeOpennessRight: 0.5,
+        eyeSquintLeft: 0, eyeSquintRight: 0,
+        browRaiseLeft: 0, browRaiseRight: 0,
+        browFurrow: 0,
+        smileLeft: 0, smileRight: 0,
+        frownLeft: 0, frownRight: 0,
+        mouthOpen: 0, mouthPucker: 0, lipPress: 0,
+        jawOpen: 0, jawLeft: 0, jawRight: 0,
+        cheekSquintLeft: 0, cheekSquintRight: 0,
+        headPitch: 0, headYaw: 0, headRoll: 0
+    )
 }
 
 // MARK: - Health Indicators (Computed Scores)
 
 /// Derived health-relevant scores from facial analysis
 struct FacialHealthIndicators: Codable {
-    /// 0-100: Eye openness, wideness, brow position, head posture
+    /// 0-100: Eye openness, brow position, head posture
     let alertnessScore: Double
 
-    /// 0-100: Brow tension, jaw clenching, eye squint
+    /// 0-100: Brow tension, squinting, lip press
     let tensionScore: Double
 
-    /// 0-100: Smile intensity, frown detection
+    /// 0-100: Smile intensity (50 = neutral, >50 = happy, <50 = unhappy)
     let smileScore: Double
 
     /// 0-100: Left/right balance across features
     let facialSymmetry: Double
 
-    /// 0-100: Quality indicator for trusting metrics (face quality, lighting, pose)
+    /// 0-100: Quality indicator for trusting metrics
     let captureReliabilityScore: Double
 
     /// Average of all scores weighted by reliability
     var overallScore: Double {
-        let weights = [0.3, 0.2, 0.2, 0.15, 0.15]  // alertness, tension(inverted), smile, symmetry, reliability
-        let invertedTension = 100.0 - tensionScore  // Lower tension is better
+        let weights = [0.3, 0.2, 0.2, 0.15, 0.15]
+        let invertedTension = 100.0 - tensionScore
         let scores = [alertnessScore, invertedTension, smileScore, facialSymmetry, captureReliabilityScore]
         return zip(weights, scores).map { $0 * $1 }.reduce(0, +)
     }
@@ -67,316 +156,79 @@ struct FacialHealthIndicators: Codable {
     static let empty = FacialHealthIndicators(
         alertnessScore: 0,
         tensionScore: 0,
-        smileScore: 0,
+        smileScore: 50,
         facialSymmetry: 0,
         captureReliabilityScore: 0
     )
 }
 
-// MARK: - Vision Framework Metrics
+// MARK: - Capture Metadata
 
-/// Metrics extracted from Vision framework face detection
-struct VisionFaceMetrics: Codable {
-    /// Overall face detection quality (0-1)
-    let faceQuality: Double
-
-    /// Head rotation around z-axis (tilt left/right) in radians
-    let roll: Double
-
-    /// Head rotation around x-axis (look up/down) in radians
-    let pitch: Double
-
-    /// Head rotation around y-axis (look left/right) in radians
-    let yaw: Double
-
-    /// Left eye openness (0 = closed, 1 = fully open)
-    let leftEyeOpenness: Double
-
-    /// Right eye openness (0 = closed, 1 = fully open)
-    let rightEyeOpenness: Double
-
-    /// Bounding box of face in normalized coordinates
-    let faceBoundingBox: CodableBoundingBox
-
-    /// Number of landmarks detected
+struct CaptureMetadata: Codable {
+    let imageWidth: Int
+    let imageHeight: Int
+    let faceWidth: Double
+    let faceHeight: Double
     let landmarkCount: Int
 
-    // Computed properties
-    var averageEyeOpenness: Double {
-        (leftEyeOpenness + rightEyeOpenness) / 2.0
-    }
-
-    var eyeSymmetry: Double {
-        1.0 - abs(leftEyeOpenness - rightEyeOpenness)
-    }
-
-    var headPoseScore: Double {
-        // Score based on how centered the head is (0-1, higher is more centered)
-        let rollScore = 1.0 - min(abs(roll) / 0.5, 1.0)
-        let pitchScore = 1.0 - min(abs(pitch) / 0.5, 1.0)
-        let yawScore = 1.0 - min(abs(yaw) / 0.5, 1.0)
-        return (rollScore + pitchScore + yawScore) / 3.0
-    }
-
-    /// Convert radians to degrees for display
-    var rollDegrees: Double { roll * 180.0 / .pi }
-    var pitchDegrees: Double { pitch * 180.0 / .pi }
-    var yawDegrees: Double { yaw * 180.0 / .pi }
+    static let empty = CaptureMetadata(
+        imageWidth: 0,
+        imageHeight: 0,
+        faceWidth: 0,
+        faceHeight: 0,
+        landmarkCount: 0
+    )
 }
 
-// MARK: - ARKit Blend Shapes
+// MARK: - Score Interpretation
 
-/// All 52 ARKit blend shape coefficients
-struct ARKitFaceMetrics: Codable {
-    // Eye expressions
-    let eyeBlinkLeft: Double
-    let eyeBlinkRight: Double
-    let eyeLookDownLeft: Double
-    let eyeLookDownRight: Double
-    let eyeLookInLeft: Double
-    let eyeLookInRight: Double
-    let eyeLookOutLeft: Double
-    let eyeLookOutRight: Double
-    let eyeLookUpLeft: Double
-    let eyeLookUpRight: Double
-    let eyeSquintLeft: Double
-    let eyeSquintRight: Double
-    let eyeWideLeft: Double
-    let eyeWideRight: Double
+extension FacialHealthIndicators {
 
-    // Eyebrow expressions
-    let browDownLeft: Double
-    let browDownRight: Double
-    let browInnerUp: Double
-    let browOuterUpLeft: Double
-    let browOuterUpRight: Double
-
-    // Jaw expressions
-    let jawForward: Double
-    let jawLeft: Double
-    let jawRight: Double
-    let jawOpen: Double
-
-    // Mouth expressions
-    let mouthClose: Double
-    let mouthFunnel: Double
-    let mouthPucker: Double
-    let mouthLeft: Double
-    let mouthRight: Double
-    let mouthSmileLeft: Double
-    let mouthSmileRight: Double
-    let mouthFrownLeft: Double
-    let mouthFrownRight: Double
-    let mouthDimpleLeft: Double
-    let mouthDimpleRight: Double
-    let mouthStretchLeft: Double
-    let mouthStretchRight: Double
-    let mouthRollLower: Double
-    let mouthRollUpper: Double
-    let mouthShrugLower: Double
-    let mouthShrugUpper: Double
-    let mouthPressLeft: Double
-    let mouthPressRight: Double
-    let mouthLowerDownLeft: Double
-    let mouthLowerDownRight: Double
-    let mouthUpperUpLeft: Double
-    let mouthUpperUpRight: Double
-
-    // Cheek and nose
-    let cheekPuff: Double
-    let cheekSquintLeft: Double
-    let cheekSquintRight: Double
-    let noseSneerLeft: Double
-    let noseSneerRight: Double
-
-    // Tongue (available on some devices)
-    let tongueOut: Double
-
-    // MARK: - Computed Properties
-
-    var averageSmile: Double {
-        (mouthSmileLeft + mouthSmileRight) / 2.0
+    var alertnessDescription: String {
+        switch alertnessScore {
+        case 80...100: return "Very Alert"
+        case 60..<80: return "Alert"
+        case 40..<60: return "Moderate"
+        case 20..<40: return "Tired"
+        default: return "Fatigued"
+        }
     }
 
-    var averageFrown: Double {
-        (mouthFrownLeft + mouthFrownRight) / 2.0
+    var tensionDescription: String {
+        switch tensionScore {
+        case 80...100: return "Very Tense"
+        case 60..<80: return "Tense"
+        case 40..<60: return "Moderate"
+        case 20..<40: return "Relaxed"
+        default: return "Very Relaxed"
+        }
     }
 
-    var averageBlink: Double {
-        (eyeBlinkLeft + eyeBlinkRight) / 2.0
+    var moodDescription: String {
+        switch smileScore {
+        case 80...100: return "Very Happy"
+        case 60..<80: return "Happy"
+        case 40..<60: return "Neutral"
+        case 20..<40: return "Unhappy"
+        default: return "Very Unhappy"
+        }
     }
 
-    var averageEyeWide: Double {
-        (eyeWideLeft + eyeWideRight) / 2.0
+    var symmetryDescription: String {
+        switch facialSymmetry {
+        case 90...100: return "Excellent"
+        case 75..<90: return "Good"
+        case 60..<75: return "Moderate"
+        default: return "Asymmetric"
+        }
     }
 
-    var averageSquint: Double {
-        (eyeSquintLeft + eyeSquintRight) / 2.0
-    }
-
-    var averageBrowDown: Double {
-        (browDownLeft + browDownRight) / 2.0
-    }
-
-    var jawTension: Double {
-        // Combine jaw clenching indicators
-        let jawClenching = 1.0 - jawOpen  // Closed jaw indicates tension
-        let jawPushing = jawForward
-        return (jawClenching + jawPushing) / 2.0
-    }
-
-    /// Calculate left-right symmetry across all paired features
-    var overallSymmetry: Double {
-        let pairs: [(Double, Double)] = [
-            (eyeBlinkLeft, eyeBlinkRight),
-            (eyeSquintLeft, eyeSquintRight),
-            (eyeWideLeft, eyeWideRight),
-            (browDownLeft, browDownRight),
-            (browOuterUpLeft, browOuterUpRight),
-            (mouthSmileLeft, mouthSmileRight),
-            (mouthFrownLeft, mouthFrownRight),
-            (cheekSquintLeft, cheekSquintRight),
-            (noseSneerLeft, noseSneerRight)
-        ]
-
-        let symmetryScores = pairs.map { 1.0 - abs($0.0 - $0.1) }
-        return symmetryScores.reduce(0, +) / Double(symmetryScores.count)
-    }
-
-    /// Get all blend shapes as a dictionary for JSON export
-    var allBlendShapes: [String: Double] {
-        [
-            "eyeBlinkLeft": eyeBlinkLeft,
-            "eyeBlinkRight": eyeBlinkRight,
-            "eyeLookDownLeft": eyeLookDownLeft,
-            "eyeLookDownRight": eyeLookDownRight,
-            "eyeLookInLeft": eyeLookInLeft,
-            "eyeLookInRight": eyeLookInRight,
-            "eyeLookOutLeft": eyeLookOutLeft,
-            "eyeLookOutRight": eyeLookOutRight,
-            "eyeLookUpLeft": eyeLookUpLeft,
-            "eyeLookUpRight": eyeLookUpRight,
-            "eyeSquintLeft": eyeSquintLeft,
-            "eyeSquintRight": eyeSquintRight,
-            "eyeWideLeft": eyeWideLeft,
-            "eyeWideRight": eyeWideRight,
-            "browDownLeft": browDownLeft,
-            "browDownRight": browDownRight,
-            "browInnerUp": browInnerUp,
-            "browOuterUpLeft": browOuterUpLeft,
-            "browOuterUpRight": browOuterUpRight,
-            "jawForward": jawForward,
-            "jawLeft": jawLeft,
-            "jawRight": jawRight,
-            "jawOpen": jawOpen,
-            "mouthClose": mouthClose,
-            "mouthFunnel": mouthFunnel,
-            "mouthPucker": mouthPucker,
-            "mouthLeft": mouthLeft,
-            "mouthRight": mouthRight,
-            "mouthSmileLeft": mouthSmileLeft,
-            "mouthSmileRight": mouthSmileRight,
-            "mouthFrownLeft": mouthFrownLeft,
-            "mouthFrownRight": mouthFrownRight,
-            "mouthDimpleLeft": mouthDimpleLeft,
-            "mouthDimpleRight": mouthDimpleRight,
-            "mouthStretchLeft": mouthStretchLeft,
-            "mouthStretchRight": mouthStretchRight,
-            "mouthRollLower": mouthRollLower,
-            "mouthRollUpper": mouthRollUpper,
-            "mouthShrugLower": mouthShrugLower,
-            "mouthShrugUpper": mouthShrugUpper,
-            "mouthPressLeft": mouthPressLeft,
-            "mouthPressRight": mouthPressRight,
-            "mouthLowerDownLeft": mouthLowerDownLeft,
-            "mouthLowerDownRight": mouthLowerDownRight,
-            "mouthUpperUpLeft": mouthUpperUpLeft,
-            "mouthUpperUpRight": mouthUpperUpRight,
-            "cheekPuff": cheekPuff,
-            "cheekSquintLeft": cheekSquintLeft,
-            "cheekSquintRight": cheekSquintRight,
-            "noseSneerLeft": noseSneerLeft,
-            "noseSneerRight": noseSneerRight,
-            "tongueOut": tongueOut
-        ]
-    }
-
-    /// Create from ARKit blend shape dictionary
-    static func from(blendShapes: [String: Double]) -> ARKitFaceMetrics {
-        ARKitFaceMetrics(
-            eyeBlinkLeft: blendShapes["eyeBlinkLeft"] ?? 0,
-            eyeBlinkRight: blendShapes["eyeBlinkRight"] ?? 0,
-            eyeLookDownLeft: blendShapes["eyeLookDownLeft"] ?? 0,
-            eyeLookDownRight: blendShapes["eyeLookDownRight"] ?? 0,
-            eyeLookInLeft: blendShapes["eyeLookInLeft"] ?? 0,
-            eyeLookInRight: blendShapes["eyeLookInRight"] ?? 0,
-            eyeLookOutLeft: blendShapes["eyeLookOutLeft"] ?? 0,
-            eyeLookOutRight: blendShapes["eyeLookOutRight"] ?? 0,
-            eyeLookUpLeft: blendShapes["eyeLookUpLeft"] ?? 0,
-            eyeLookUpRight: blendShapes["eyeLookUpRight"] ?? 0,
-            eyeSquintLeft: blendShapes["eyeSquintLeft"] ?? 0,
-            eyeSquintRight: blendShapes["eyeSquintRight"] ?? 0,
-            eyeWideLeft: blendShapes["eyeWideLeft"] ?? 0,
-            eyeWideRight: blendShapes["eyeWideRight"] ?? 0,
-            browDownLeft: blendShapes["browDownLeft"] ?? 0,
-            browDownRight: blendShapes["browDownRight"] ?? 0,
-            browInnerUp: blendShapes["browInnerUp"] ?? 0,
-            browOuterUpLeft: blendShapes["browOuterUpLeft"] ?? 0,
-            browOuterUpRight: blendShapes["browOuterUpRight"] ?? 0,
-            jawForward: blendShapes["jawForward"] ?? 0,
-            jawLeft: blendShapes["jawLeft"] ?? 0,
-            jawRight: blendShapes["jawRight"] ?? 0,
-            jawOpen: blendShapes["jawOpen"] ?? 0,
-            mouthClose: blendShapes["mouthClose"] ?? 0,
-            mouthFunnel: blendShapes["mouthFunnel"] ?? 0,
-            mouthPucker: blendShapes["mouthPucker"] ?? 0,
-            mouthLeft: blendShapes["mouthLeft"] ?? 0,
-            mouthRight: blendShapes["mouthRight"] ?? 0,
-            mouthSmileLeft: blendShapes["mouthSmileLeft"] ?? 0,
-            mouthSmileRight: blendShapes["mouthSmileRight"] ?? 0,
-            mouthFrownLeft: blendShapes["mouthFrownLeft"] ?? 0,
-            mouthFrownRight: blendShapes["mouthFrownRight"] ?? 0,
-            mouthDimpleLeft: blendShapes["mouthDimpleLeft"] ?? 0,
-            mouthDimpleRight: blendShapes["mouthDimpleRight"] ?? 0,
-            mouthStretchLeft: blendShapes["mouthStretchLeft"] ?? 0,
-            mouthStretchRight: blendShapes["mouthStretchRight"] ?? 0,
-            mouthRollLower: blendShapes["mouthRollLower"] ?? 0,
-            mouthRollUpper: blendShapes["mouthRollUpper"] ?? 0,
-            mouthShrugLower: blendShapes["mouthShrugLower"] ?? 0,
-            mouthShrugUpper: blendShapes["mouthShrugUpper"] ?? 0,
-            mouthPressLeft: blendShapes["mouthPressLeft"] ?? 0,
-            mouthPressRight: blendShapes["mouthPressRight"] ?? 0,
-            mouthLowerDownLeft: blendShapes["mouthLowerDownLeft"] ?? 0,
-            mouthLowerDownRight: blendShapes["mouthLowerDownRight"] ?? 0,
-            mouthUpperUpLeft: blendShapes["mouthUpperUpLeft"] ?? 0,
-            mouthUpperUpRight: blendShapes["mouthUpperUpRight"] ?? 0,
-            cheekPuff: blendShapes["cheekPuff"] ?? 0,
-            cheekSquintLeft: blendShapes["cheekSquintLeft"] ?? 0,
-            cheekSquintRight: blendShapes["cheekSquintRight"] ?? 0,
-            noseSneerLeft: blendShapes["noseSneerLeft"] ?? 0,
-            noseSneerRight: blendShapes["noseSneerRight"] ?? 0,
-            tongueOut: blendShapes["tongueOut"] ?? 0
-        )
-    }
-}
-
-// MARK: - Codable Bounding Box
-
-/// A Codable wrapper for CGRect to avoid extending CoreFoundation types
-struct CodableBoundingBox: Codable {
-    let x: CGFloat
-    let y: CGFloat
-    let width: CGFloat
-    let height: CGFloat
-
-    init(_ rect: CGRect) {
-        self.x = rect.origin.x
-        self.y = rect.origin.y
-        self.width = rect.size.width
-        self.height = rect.size.height
-    }
-
-    var cgRect: CGRect {
-        CGRect(x: x, y: y, width: width, height: height)
+    var reliabilityDescription: String {
+        switch captureReliabilityScore {
+        case 80...100: return "High Quality"
+        case 60..<80: return "Good Quality"
+        case 40..<60: return "Moderate Quality"
+        default: return "Low Quality"
+        }
     }
 }

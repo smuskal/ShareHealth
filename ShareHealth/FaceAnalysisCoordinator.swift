@@ -2,7 +2,7 @@ import UIKit
 import Combine
 import CoreMedia
 
-/// Orchestrates Vision + ARKit analysis to produce complete facial metrics
+/// Orchestrates facial analysis using MediaPipe-compatible feature extraction
 class FaceAnalysisCoordinator: ObservableObject {
 
     // MARK: - Published State
@@ -15,15 +15,11 @@ class FaceAnalysisCoordinator: ObservableObject {
 
     // MARK: - Private Properties
 
-    private let visionAnalyzer = VisionFaceAnalyzer()
-    private let arkitAnalyzer = ARKitFaceAnalyzer()
+    private let analyzer = MediaPipeFaceAnalyzer()
 
     // MARK: - Public Methods
 
-    /// Analyze a captured face image and return complete metrics
-    /// - Parameters:
-    ///   - image: The captured UIImage
-    ///   - completion: Callback with the analysis results
+    /// Analyze a captured face image and return MediaPipe-compatible metrics
     func analyze(image: UIImage, completion: @escaping (FacialMetrics?) -> Void) {
         guard !isAnalyzing else {
             completion(nil)
@@ -33,47 +29,23 @@ class FaceAnalysisCoordinator: ObservableObject {
         DispatchQueue.main.async {
             self.isAnalyzing = true
             self.analysisProgress = 0
-            self.currentStep = "Starting analysis..."
+            self.currentStep = "Detecting face..."
             self.analysisError = nil
         }
 
-        // Step 1: Vision analysis (always available)
-        updateProgress(0.1, step: "Detecting face...")
+        updateProgress(0.2, step: "Detecting face...")
 
-        visionAnalyzer.analyze(image: image) { [weak self] visionMetrics in
+        analyzer.analyze(image: image) { [weak self] metrics in
             guard let self = self else { return }
 
-            if visionMetrics == nil {
-                self.completeAnalysis(with: nil, completion: completion)
-                return
-            }
+            if let metrics = metrics {
+                self.updateProgress(0.8, step: "Computing health indicators...")
 
-            self.updateProgress(0.4, step: "Face detected")
-
-            // Step 2: ARKit analysis (if available)
-            if ARKitFaceAnalyzer.isAvailable {
-                self.updateProgress(0.5, step: "Analyzing expressions...")
-
-                self.arkitAnalyzer.analyze(image: image) { arkitMetrics in
-                    self.updateProgress(0.8, step: "Calculating health indicators...")
-
-                    let metrics = self.buildMetrics(
-                        vision: visionMetrics,
-                        arkit: arkitMetrics
-                    )
-
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                     self.completeAnalysis(with: metrics, completion: completion)
                 }
             } else {
-                // Vision-only mode
-                self.updateProgress(0.8, step: "Calculating health indicators...")
-
-                let metrics = self.buildMetrics(
-                    vision: visionMetrics,
-                    arkit: nil
-                )
-
-                self.completeAnalysis(with: metrics, completion: completion)
+                self.completeAnalysis(with: nil, completion: completion)
             }
         }
     }
@@ -96,30 +68,6 @@ class FaceAnalysisCoordinator: ObservableObject {
         }
     }
 
-    private func buildMetrics(vision: VisionFaceMetrics?, arkit: ARKitFaceMetrics?) -> FacialMetrics {
-        let healthIndicators = HealthIndicatorCalculator.calculate(
-            visionMetrics: vision,
-            arkitMetrics: arkit
-        )
-
-        let analysisMode: AnalysisMode
-        if vision != nil && arkit != nil {
-            analysisMode = .visionAndARKit
-        } else if vision != nil {
-            analysisMode = .visionOnly
-        } else {
-            analysisMode = .none
-        }
-
-        return FacialMetrics(
-            captureTimestamp: Date(),
-            analysisMode: analysisMode,
-            healthIndicators: healthIndicators,
-            visionMetrics: vision,
-            arkitMetrics: arkit
-        )
-    }
-
     private func completeAnalysis(with metrics: FacialMetrics?, completion: @escaping (FacialMetrics?) -> Void) {
         DispatchQueue.main.async {
             self.analysisProgress = 1.0
@@ -133,6 +81,13 @@ class FaceAnalysisCoordinator: ObservableObject {
 
             completion(metrics)
         }
+    }
+
+    // MARK: - Real-time Detection
+
+    /// Check if a face is detected in a sample buffer (for real-time overlay)
+    func checkFacePresence(in sampleBuffer: CMSampleBuffer, completion: @escaping (Bool, Double) -> Void) {
+        analyzer.detectFace(in: sampleBuffer, completion: completion)
     }
 }
 
@@ -171,15 +126,5 @@ extension FaceAnalysisCoordinator {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         return try decoder.decode(FacialMetrics.self, from: data)
-    }
-}
-
-// MARK: - Real-time Analysis
-
-extension FaceAnalysisCoordinator {
-
-    /// Check if a face is detected in a sample buffer (for real-time overlay)
-    func checkFacePresence(in sampleBuffer: CMSampleBuffer, completion: @escaping (Bool, Double) -> Void) {
-        visionAnalyzer.analyzeRealtime(sampleBuffer: sampleBuffer, completion: completion)
     }
 }

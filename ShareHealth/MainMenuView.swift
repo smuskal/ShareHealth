@@ -19,6 +19,15 @@ struct MainMenuView: View {
                 Spacer()
 
                 VStack(spacing: 20) {
+                    NavigationLink(destination: FaceToHealthView()) {
+                        MenuButton(
+                            title: "Face to Health",
+                            subtitle: "Predict health metrics from facial analysis",
+                            iconName: "face.smiling.inverse",
+                            color: .purple
+                        )
+                    }
+
                     NavigationLink(destination: HealthExportView()) {
                         MenuButton(
                             title: "Export Health Data",
@@ -51,8 +60,10 @@ struct MainMenuView: View {
                 Spacer()
                 Spacer()
 
-                // Version number
-                Text("Version \(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown")")
+                // Version number with build
+                let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "?"
+                let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "?"
+                Text("Version \(version) (\(build))")
                     .font(.caption)
                     .foregroundColor(.gray.opacity(0.5))
                     .padding(.bottom, 20)

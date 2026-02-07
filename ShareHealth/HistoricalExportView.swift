@@ -27,6 +27,10 @@ struct HistoricalExportView: View {
     @State private var exportLog: [String] = []
     @State private var showingLog = false
 
+    // Face export options
+    @State private var includeFaceImages = true
+    @State private var faceImagesExported: Int = 0
+
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
@@ -67,11 +71,7 @@ struct HistoricalExportView: View {
                 }
             }
         } message: {
-            if failedDays.isEmpty {
-                Text("\(filesExported) daily CSV files exported successfully.")
-            } else {
-                Text("\(filesExported) files exported. \(failedDays.count) days failed.")
-            }
+            Text(exportCompleteMessage)
         }
         .sheet(isPresented: $showingLog) {
             ExportLogView(log: exportLog, failedDays: failedDays)
@@ -143,6 +143,7 @@ struct HistoricalExportView: View {
             earliestDateInfoSection
             dateRangeSection
             folderSelectionSection
+            exportOptionsSection
 
             if isExporting {
                 exportProgressSection
@@ -314,6 +315,54 @@ struct HistoricalExportView: View {
         .padding(.horizontal)
     }
 
+    // MARK: - Export Options
+    private var exportOptionsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Export Options")
+                .font(.headline)
+
+            Toggle(isOn: $includeFaceImages) {
+                HStack {
+                    Image(systemName: "person.crop.circle")
+                        .foregroundColor(.purple)
+                    VStack(alignment: .leading) {
+                        Text("Include Face Images")
+                            .font(.subheadline)
+                        Text("Export faces with metrics & health data JSONs")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .tint(.purple)
+
+            if includeFaceImages {
+                let faceCount = FacialDataStore.shared.captureCount
+                if faceCount > 0 {
+                    HStack {
+                        Image(systemName: "info.circle")
+                            .foregroundColor(.blue)
+                        Text("\(faceCount) face captures available for export")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                } else {
+                    HStack {
+                        Image(systemName: "exclamationmark.circle")
+                            .foregroundColor(.orange)
+                        Text("No face captures stored yet")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+        .padding(.horizontal)
+    }
+
     // MARK: - Export Summary
     private var exportSummarySection: some View {
         VStack(spacing: 8) {
@@ -331,6 +380,13 @@ struct HistoricalExportView: View {
                 .font(.caption2)
                 .fontWeight(.medium)
                 .foregroundColor(.orange)
+
+            if includeFaceImages {
+                Text("+ faces/YYYY/MM/Face-*.jpg with JSONs")
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .foregroundColor(.purple)
+            }
         }
         .padding()
         .background(Color(.systemGray6))
@@ -339,6 +395,19 @@ struct HistoricalExportView: View {
     }
 
     // MARK: - Helper Functions
+
+    private var exportCompleteMessage: String {
+        var message = "\(filesExported) daily CSV files exported"
+        if faceImagesExported > 0 {
+            message += ", \(faceImagesExported) face images"
+        }
+        if !failedDays.isEmpty {
+            message += ". \(failedDays.count) days failed"
+        } else {
+            message += " successfully"
+        }
+        return message + "."
+    }
 
     private func calculateDayCount() -> Int {
         let calendar = Calendar.current
@@ -550,15 +619,80 @@ struct HistoricalExportView: View {
             currentDate = calendar.date(byAdding: .day, value: 1, to: currentDate) ?? currentDate
         }
 
+        // Export face images if enabled
+        var facesExported = 0
+        if includeFaceImages {
+            await MainActor.run {
+                currentExportStatus = "Exporting face images..."
+            }
+            facesExported = await exportFaceImages(to: folderURL)
+        }
+
         await MainActor.run {
             filesExported = exportedCount
+            faceImagesExported = facesExported
             failedDays = localFailedDays
             exportProgress = 1.0
             currentExportStatus = "Export complete!"
             isExporting = false
-            logMessage("Export finished: \(exportedCount) succeeded, \(failedCount) failed")
+            logMessage("Export finished: \(exportedCount) CSVs, \(facesExported) faces, \(failedCount) failed")
             showingSuccess = true
         }
+    }
+
+    /// Export face images with their JSON files to the export folder
+    /// Images are exported as-is (no transformation)
+    private func exportFaceImages(to folderURL: URL) async -> Int {
+        let dataStore = FacialDataStore.shared
+        let captures = dataStore.captures
+        var exportedCount = 0
+
+        // Create faces subdirectory
+        let facesBaseURL = folderURL.appendingPathComponent("faces", isDirectory: true)
+
+        for capture in captures {
+            do {
+                // Create year/month subdirectory
+                let formatter = DateFormatter()
+                formatter.dateFormat = "yyyy/MM"
+                let yearMonth = formatter.string(from: capture.captureDate)
+                let yearMonthURL = facesBaseURL.appendingPathComponent(yearMonth, isDirectory: true)
+
+                if !FileManager.default.fileExists(atPath: yearMonthURL.path) {
+                    try FileManager.default.createDirectory(at: yearMonthURL, withIntermediateDirectories: true)
+                }
+
+                // Export image - just copy as-is (no transformation)
+                let destImageURL = yearMonthURL.appendingPathComponent(capture.imageURL.lastPathComponent)
+                if FileManager.default.fileExists(atPath: destImageURL.path) {
+                    try FileManager.default.removeItem(at: destImageURL)
+                }
+                try FileManager.default.copyItem(at: capture.imageURL, to: destImageURL)
+
+                // Copy metrics JSON if exists (facial metrics only, not health data)
+                if FileManager.default.fileExists(atPath: capture.metricsURL.path) {
+                    let destMetricsURL = yearMonthURL.appendingPathComponent(capture.metricsURL.lastPathComponent)
+                    if FileManager.default.fileExists(atPath: destMetricsURL.path) {
+                        try FileManager.default.removeItem(at: destMetricsURL)
+                    }
+                    try FileManager.default.copyItem(at: capture.metricsURL, to: destMetricsURL)
+                }
+
+                // Note: _health.json is intentionally NOT exported - kept only in local iOS storage
+
+                exportedCount += 1
+            } catch {
+                await MainActor.run {
+                    logMessage("Failed to export face \(capture.id): \(error.localizedDescription)")
+                }
+            }
+        }
+
+        await MainActor.run {
+            logMessage("Exported \(exportedCount) face images to \(facesBaseURL.path)")
+        }
+
+        return exportedCount
     }
 
     private func withTimeout<T>(seconds: Double, operation: @escaping () async -> T?) async throws -> T? {

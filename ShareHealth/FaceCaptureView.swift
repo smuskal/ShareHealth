@@ -236,7 +236,7 @@ class CameraManager: NSObject, ObservableObject {
     private let photoOutput = AVCapturePhotoOutput()
     private let videoOutput = AVCaptureVideoDataOutput()
     private var captureCompletion: ((UIImage?) -> Void)?
-    private let visionAnalyzer = VisionFaceAnalyzer()
+    private let faceAnalyzer = MediaPipeFaceAnalyzer()
 
     // Face detection callback
     var onFaceDetection: ((Bool, Double) -> Void)?
@@ -327,9 +327,12 @@ extension CameraManager: AVCapturePhotoCaptureDelegate {
             return
         }
 
-        // Mirror the image horizontally to match what the user sees in preview
-        let mirroredImage = UIImage(cgImage: image.cgImage!, scale: image.scale, orientation: .leftMirrored)
-        captureCompletion?(mirroredImage)
+        // Apply horizontal flip for front camera captures.
+        // The front camera captures a non-mirrored image by default, but users expect
+        // the saved image to match the mirrored preview they see (like a mirror).
+        // Flipping ensures text on clothing etc. reads correctly in stored images.
+        let flippedImage = image.flippedHorizontally()
+        captureCompletion?(flippedImage)
     }
 }
 
@@ -341,7 +344,7 @@ extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
         lastProcessingTime = now
 
         // Perform face detection
-        visionAnalyzer.analyzeRealtime(sampleBuffer: sampleBuffer) { [weak self] detected, quality in
+        faceAnalyzer.detectFace(in: sampleBuffer) { [weak self] detected, quality in
             self?.onFaceDetection?(detected, quality)
         }
     }

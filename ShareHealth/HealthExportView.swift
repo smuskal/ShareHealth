@@ -5,6 +5,7 @@ import AVFoundation
 
 struct HealthExportView: View {
     @StateObject private var exporter = HealthDataExporter()
+    @ObservedObject private var facialDataStore = FacialDataStore.shared
     @State private var selectedDate = Date()
     @State private var isAuthorized = UserDefaults.standard.bool(forKey: "healthExportAuthorized")
     @State private var isRequestingAuth = false
@@ -22,11 +23,16 @@ struct HealthExportView: View {
     @State private var showingCameraPermissionAlert = false
     @State private var isShareSheetExport = false
     @State private var capturedImageForSharing: UIImage? = nil
+    @State private var capturedMetricsForSharing: FacialMetrics? = nil
 
     // Data preview feature
     @State private var showingDataPreview = false
     @State private var previewData: [String: String]? = nil
     @State private var isLoadingPreview = false
+
+    // Face history feature
+    @State private var showingFaceHistory = false
+    @State private var pendingHealthData: [String: String]? = nil
 
     var body: some View {
         ScrollView {
@@ -95,6 +101,9 @@ struct HealthExportView: View {
         }
         .sheet(isPresented: $showingDataPreview) {
             DataPreviewView(data: previewData ?? [:], date: selectedDate)
+        }
+        .sheet(isPresented: $showingFaceHistory) {
+            FaceHistoryView()
         }
     }
 
@@ -374,6 +383,25 @@ struct HealthExportView: View {
                 }
             }
             .toggleStyle(SwitchToggleStyle(tint: .green))
+
+            // View history button
+            Button(action: { showingFaceHistory = true }) {
+                HStack {
+                    Image(systemName: "clock.arrow.circlepath")
+                    Text("View Face History")
+                    Spacer()
+                    Text("\(facialDataStore.captureCount) captures")
+                        .foregroundColor(.secondary)
+                    Image(systemName: "chevron.right")
+                        .foregroundColor(.secondary)
+                        .font(.caption)
+                }
+                .font(.subheadline)
+            }
+            .padding(.vertical, 12)
+            .padding(.horizontal)
+            .background(Color(.systemGray6))
+            .cornerRadius(10)
         }
         .padding(.horizontal)
     }
@@ -493,9 +521,13 @@ struct HealthExportView: View {
     }
 
     private func handleFaceCaptured(_ image: UIImage, metrics: FacialMetrics?) {
-        // If this is a share sheet export, store the image and complete the share sheet flow
+        // Always save locally for on-device model building
+        saveToLocalStore(image: image, metrics: metrics)
+
+        // If this is a share sheet export, store the image and metrics and complete the share sheet flow
         if isShareSheetExport {
             capturedImageForSharing = image
+            capturedMetricsForSharing = metrics
             completeShareSheetExport()
             return
         }
@@ -564,6 +596,31 @@ struct HealthExportView: View {
         pendingExportURL = nil
     }
 
+    private func saveToLocalStore(image: UIImage, metrics: FacialMetrics?) {
+        // Save face capture locally for on-device model building
+        guard let metrics = metrics else {
+            print("No metrics to save locally")
+            return
+        }
+
+        // Get health data for the selected date
+        exporter.exportHealthDataRaw(for: selectedDate) { healthData in
+            DispatchQueue.main.async {
+                do {
+                    try FacialDataStore.shared.saveCapture(
+                        image: image,
+                        metrics: metrics,
+                        healthData: healthData ?? [:],
+                        date: self.selectedDate
+                    )
+                    print("Face capture saved locally for model building")
+                } catch {
+                    print("Failed to save locally: \(error)")
+                }
+            }
+        }
+    }
+
     private func cancelPendingExport() {
         // Clean up the temp file if it exists
         if let tempURL = pendingExportURL {
@@ -572,6 +629,7 @@ struct HealthExportView: View {
         pendingExportURL = nil
         isShareSheetExport = false
         capturedImageForSharing = nil
+        capturedMetricsForSharing = nil
         // No success message - export was cancelled
     }
 
@@ -649,23 +707,51 @@ struct HealthExportView: View {
             pendingExportURL = nil
             isShareSheetExport = false
             capturedImageForSharing = nil
+            capturedMetricsForSharing = nil
             return
         }
 
         // Build the list of items to share
         var itemsToShare: [Any] = [csvURL]
+        var tempJSONURL: URL? = nil
 
-        // Add the captured image if available
+        // Add the captured image and metrics JSON if available
         if let image = capturedImageForSharing {
             itemsToShare.append(image)
+
+            // Create a temporary JSON file for the metrics
+            if let metrics = capturedMetricsForSharing {
+                let dateFormatter = DateFormatter()
+                dateFormatter.dateFormat = "yyyy-MM-dd_HHmmss"
+                let timestamp = dateFormatter.string(from: Date())
+                let jsonFileName = "Face-\(timestamp).json"
+                let jsonURL = FileManager.default.temporaryDirectory.appendingPathComponent(jsonFileName)
+
+                do {
+                    try FaceAnalysisCoordinator.saveMetrics(metrics, to: jsonURL)
+                    itemsToShare.append(jsonURL)
+                    tempJSONURL = jsonURL
+                    print("Face metrics JSON created for sharing: \(jsonURL.path)")
+                } catch {
+                    print("Failed to create metrics JSON for sharing: \(error)")
+                }
+            }
         }
 
         presentShareSheet(with: itemsToShare)
 
-        // Clean up
+        // Clean up temp JSON after a delay (share sheet needs time to read it)
+        if let jsonURL = tempJSONURL {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 60) {
+                try? FileManager.default.removeItem(at: jsonURL)
+            }
+        }
+
+        // Clean up state
         pendingExportURL = nil
         isShareSheetExport = false
         capturedImageForSharing = nil
+        capturedMetricsForSharing = nil
     }
 
     private func presentShareSheet(with items: [Any]) {

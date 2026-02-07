@@ -11,21 +11,13 @@ struct FaceAnalysisResultView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
             headerSection
 
             ScrollView {
                 VStack(spacing: 20) {
-                    // Face image preview
                     imagePreview
-
-                    // Health indicators
                     healthIndicatorsSection
-
-                    // Device capability info
                     capabilityInfo
-
-                    // Action buttons
                     actionButtons
                 }
                 .padding(.horizontal)
@@ -46,7 +38,7 @@ struct FaceAnalysisResultView: View {
                 .font(.headline)
                 .padding(.top, 16)
 
-            Text(metrics.analysisMode == .visionAndARKit ? "Full Analysis" : "Basic Analysis")
+            Text("MediaPipe Analysis")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -74,7 +66,6 @@ struct FaceAnalysisResultView: View {
 
     private var healthIndicatorsSection: some View {
         VStack(spacing: 16) {
-            // Main scores grid
             LazyVGrid(columns: [
                 GridItem(.flexible()),
                 GridItem(.flexible())
@@ -133,7 +124,6 @@ struct FaceAnalysisResultView: View {
             .background(Color(.systemGray6))
             .cornerRadius(10)
 
-            // View details button
             Button(action: { showingDetails = true }) {
                 HStack {
                     Image(systemName: "chart.bar.doc.horizontal")
@@ -149,10 +139,10 @@ struct FaceAnalysisResultView: View {
 
     private var capabilityInfo: some View {
         HStack(spacing: 8) {
-            Image(systemName: metrics.analysisMode == .visionAndARKit ? "face.smiling" : "eye")
+            Image(systemName: "face.smiling")
                 .foregroundColor(.secondary)
 
-            Text(DeviceCapabilities.capabilityDescription)
+            Text("22 facial features analyzed")
                 .font(.caption)
                 .foregroundColor(.secondary)
         }
@@ -166,7 +156,6 @@ struct FaceAnalysisResultView: View {
 
     private var actionButtons: some View {
         HStack(spacing: 20) {
-            // Retake button
             Button(action: onRetake) {
                 HStack {
                     Image(systemName: "arrow.counterclockwise")
@@ -177,7 +166,6 @@ struct FaceAnalysisResultView: View {
             .buttonStyle(.bordered)
             .controlSize(.large)
 
-            // Use photo button
             Button(action: onUsePhoto) {
                 HStack {
                     Image(systemName: "checkmark")
@@ -262,7 +250,6 @@ struct ScoreCard: View {
                 .font(.caption2)
                 .foregroundColor(.secondary)
 
-            // Progress bar
             GeometryReader { geometry in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 4)
@@ -291,7 +278,7 @@ struct FacialMetricsDetailView: View {
     var body: some View {
         NavigationStack {
             List {
-                // Health Indicators Section
+                // Health Indicators
                 Section("Health Indicators") {
                     MetricRow(label: "Alertness", value: metrics.healthIndicators.alertnessScore, unit: "%")
                     MetricRow(label: "Tension", value: metrics.healthIndicators.tensionScore, unit: "%")
@@ -300,49 +287,42 @@ struct FacialMetricsDetailView: View {
                     MetricRow(label: "Capture Quality", value: metrics.healthIndicators.captureReliabilityScore, unit: "%")
                 }
 
-                // Vision Metrics Section
-                if let vision = metrics.visionMetrics {
-                    Section("Vision Analysis") {
-                        MetricRow(label: "Face Quality", value: vision.faceQuality * 100, unit: "%")
-                        MetricRow(label: "Left Eye Openness", value: vision.leftEyeOpenness * 100, unit: "%")
-                        MetricRow(label: "Right Eye Openness", value: vision.rightEyeOpenness * 100, unit: "%")
-                        MetricRow(label: "Head Roll", value: vision.rollDegrees, unit: "°")
-                        MetricRow(label: "Head Pitch", value: vision.pitchDegrees, unit: "°")
-                        MetricRow(label: "Head Yaw", value: vision.yawDegrees, unit: "°")
-                        MetricRow(label: "Landmarks Detected", value: Double(vision.landmarkCount), unit: "")
-                    }
+                // Eye Metrics
+                Section("Eye Metrics") {
+                    MetricRow(label: "Eye Openness Left", value: metrics.mediapipeFeatures.eyeOpennessLeft * 100, unit: "%")
+                    MetricRow(label: "Eye Openness Right", value: metrics.mediapipeFeatures.eyeOpennessRight * 100, unit: "%")
+                    MetricRow(label: "Eye Blink Left", value: metrics.mediapipeFeatures.eyeBlinkLeft * 100, unit: "%")
+                    MetricRow(label: "Eye Blink Right", value: metrics.mediapipeFeatures.eyeBlinkRight * 100, unit: "%")
+                    MetricRow(label: "Eye Squint Left", value: metrics.mediapipeFeatures.eyeSquintLeft * 100, unit: "%")
+                    MetricRow(label: "Eye Squint Right", value: metrics.mediapipeFeatures.eyeSquintRight * 100, unit: "%")
                 }
 
-                // ARKit Metrics Section
-                if let arkit = metrics.arkitMetrics {
-                    Section("Expression Analysis") {
-                        MetricRow(label: "Smile Left", value: arkit.mouthSmileLeft * 100, unit: "%")
-                        MetricRow(label: "Smile Right", value: arkit.mouthSmileRight * 100, unit: "%")
-                        MetricRow(label: "Frown Left", value: arkit.mouthFrownLeft * 100, unit: "%")
-                        MetricRow(label: "Frown Right", value: arkit.mouthFrownRight * 100, unit: "%")
-                        MetricRow(label: "Brow Down Left", value: arkit.browDownLeft * 100, unit: "%")
-                        MetricRow(label: "Brow Down Right", value: arkit.browDownRight * 100, unit: "%")
-                        MetricRow(label: "Brow Inner Up", value: arkit.browInnerUp * 100, unit: "%")
-                    }
-
-                    Section("Eye Tracking") {
-                        MetricRow(label: "Eye Blink Left", value: arkit.eyeBlinkLeft * 100, unit: "%")
-                        MetricRow(label: "Eye Blink Right", value: arkit.eyeBlinkRight * 100, unit: "%")
-                        MetricRow(label: "Eye Wide Left", value: arkit.eyeWideLeft * 100, unit: "%")
-                        MetricRow(label: "Eye Wide Right", value: arkit.eyeWideRight * 100, unit: "%")
-                        MetricRow(label: "Eye Squint Left", value: arkit.eyeSquintLeft * 100, unit: "%")
-                        MetricRow(label: "Eye Squint Right", value: arkit.eyeSquintRight * 100, unit: "%")
-                    }
-
-                    Section("Jaw & Mouth") {
-                        MetricRow(label: "Jaw Open", value: arkit.jawOpen * 100, unit: "%")
-                        MetricRow(label: "Jaw Forward", value: arkit.jawForward * 100, unit: "%")
-                        MetricRow(label: "Mouth Pucker", value: arkit.mouthPucker * 100, unit: "%")
-                        MetricRow(label: "Cheek Puff", value: arkit.cheekPuff * 100, unit: "%")
-                    }
+                // Brow Metrics
+                Section("Brow Metrics") {
+                    MetricRow(label: "Brow Raise Left", value: metrics.mediapipeFeatures.browRaiseLeft * 100, unit: "%")
+                    MetricRow(label: "Brow Raise Right", value: metrics.mediapipeFeatures.browRaiseRight * 100, unit: "%")
+                    MetricRow(label: "Brow Furrow", value: metrics.mediapipeFeatures.browFurrow * 100, unit: "%")
                 }
 
-                // Metadata Section
+                // Mouth Metrics
+                Section("Mouth Metrics") {
+                    MetricRow(label: "Smile Left", value: metrics.mediapipeFeatures.smileLeft * 100, unit: "%")
+                    MetricRow(label: "Smile Right", value: metrics.mediapipeFeatures.smileRight * 100, unit: "%")
+                    MetricRow(label: "Frown Left", value: metrics.mediapipeFeatures.frownLeft * 100, unit: "%")
+                    MetricRow(label: "Frown Right", value: metrics.mediapipeFeatures.frownRight * 100, unit: "%")
+                    MetricRow(label: "Mouth Open", value: metrics.mediapipeFeatures.mouthOpen * 100, unit: "%")
+                    MetricRow(label: "Mouth Pucker", value: metrics.mediapipeFeatures.mouthPucker * 100, unit: "%")
+                    MetricRow(label: "Lip Press", value: metrics.mediapipeFeatures.lipPress * 100, unit: "%")
+                }
+
+                // Head Pose
+                Section("Head Pose") {
+                    MetricRow(label: "Pitch (up/down)", value: metrics.mediapipeFeatures.headPitch, unit: "°")
+                    MetricRow(label: "Yaw (left/right)", value: metrics.mediapipeFeatures.headYaw, unit: "°")
+                    MetricRow(label: "Roll (tilt)", value: metrics.mediapipeFeatures.headRoll, unit: "°")
+                }
+
+                // Metadata
                 Section("Capture Info") {
                     HStack {
                         Text("Timestamp")
@@ -357,9 +337,15 @@ struct FacialMetricsDetailView: View {
                             .foregroundColor(.secondary)
                     }
                     HStack {
-                        Text("Version")
+                        Text("Image Size")
                         Spacer()
-                        Text(metrics.analysisVersion)
+                        Text("\(metrics.metadata.imageWidth) × \(metrics.metadata.imageHeight)")
+                            .foregroundColor(.secondary)
+                    }
+                    HStack {
+                        Text("Landmarks")
+                        Spacer()
+                        Text("\(metrics.metadata.landmarkCount)")
                             .foregroundColor(.secondary)
                     }
                 }
@@ -415,7 +401,20 @@ struct MetricRow: View {
     FaceAnalysisResultView(
         image: UIImage(systemName: "person.fill")!,
         metrics: FacialMetrics(
-            analysisMode: .visionAndARKit,
+            analysisMode: .mediapipe,
+            mediapipeFeatures: MediaPipeFeatures(
+                eyeBlinkLeft: 0.1, eyeBlinkRight: 0.12,
+                eyeOpennessLeft: 0.9, eyeOpennessRight: 0.88,
+                eyeSquintLeft: 0.05, eyeSquintRight: 0.06,
+                browRaiseLeft: 0.3, browRaiseRight: 0.28,
+                browFurrow: 0.1,
+                smileLeft: 0.5, smileRight: 0.48,
+                frownLeft: 0.0, frownRight: 0.0,
+                mouthOpen: 0.1, mouthPucker: 0.0, lipPress: 0.05,
+                jawOpen: 0.1, jawLeft: 0.0, jawRight: 0.0,
+                cheekSquintLeft: 0.04, cheekSquintRight: 0.05,
+                headPitch: -2.0, headYaw: 3.0, headRoll: 1.0
+            ),
             healthIndicators: FacialHealthIndicators(
                 alertnessScore: 72.5,
                 tensionScore: 25.0,
@@ -423,14 +422,11 @@ struct MetricRow: View {
                 facialSymmetry: 94.2,
                 captureReliabilityScore: 88.0
             ),
-            visionMetrics: VisionFaceMetrics(
-                faceQuality: 0.95,
-                roll: 0.02,
-                pitch: -0.05,
-                yaw: 0.03,
-                leftEyeOpenness: 0.78,
-                rightEyeOpenness: 0.75,
-                faceBoundingBox: CodableBoundingBox(CGRect(x: 0.2, y: 0.2, width: 0.6, height: 0.6)),
+            metadata: CaptureMetadata(
+                imageWidth: 1920,
+                imageHeight: 1080,
+                faceWidth: 450.0,
+                faceHeight: 580.0,
                 landmarkCount: 76
             )
         ),
