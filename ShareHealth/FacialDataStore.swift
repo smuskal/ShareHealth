@@ -379,7 +379,6 @@ extension UIImage {
         defer { UIGraphicsEndImageContext() }
 
         guard let context = UIGraphicsGetCurrentContext() else {
-            print("flippedHorizontally: Failed to create graphics context")
             return self
         }
 
@@ -392,11 +391,9 @@ extension UIImage {
 
         // Get the new image with transformed pixels
         guard let flippedImage = UIGraphicsGetImageFromCurrentImageContext() else {
-            print("flippedHorizontally: Failed to get image from context")
             return self
         }
 
-        print("flippedHorizontally: Successfully flipped image \(imageSize)")
         return flippedImage
     }
 }
