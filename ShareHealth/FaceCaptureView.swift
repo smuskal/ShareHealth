@@ -1,24 +1,40 @@
 import SwiftUI
 import AVFoundation
 
-/// A view that presents a front-facing camera for capturing a face image
+/// A view that presents a front-facing camera for capturing a face image with analysis
 struct FaceCaptureView: View {
     @Environment(\.dismiss) private var dismiss
     @StateObject private var cameraManager = CameraManager()
+    @StateObject private var analysisCoordinator = FaceAnalysisCoordinator()
 
-    let onCapture: (UIImage) -> Void
+    let onCapture: (UIImage, FacialMetrics?) -> Void
     let onCancel: () -> Void
 
     @State private var capturedImage: UIImage? = nil
     @State private var showingPreview = false
+    @State private var showingAnalysisResults = false
+    @State private var analyzedMetrics: FacialMetrics? = nil
+
+    // Real-time face detection state
+    @State private var isFaceDetected = false
+    @State private var faceQuality: Double = 0
 
     var body: some View {
         NavigationStack {
             ZStack {
                 Color.black.ignoresSafeArea()
 
-                if showingPreview, let image = capturedImage {
-                    previewView(image: image)
+                if showingAnalysisResults, let image = capturedImage, let metrics = analyzedMetrics {
+                    // Show analysis results
+                    FaceAnalysisResultView(
+                        image: image,
+                        metrics: metrics,
+                        onUsePhoto: usePhoto,
+                        onRetake: retakePhoto
+                    )
+                } else if showingPreview, let image = capturedImage {
+                    // Show preview while analyzing
+                    analyzingPreviewView(image: image)
                 } else {
                     cameraView
                 }
@@ -35,7 +51,7 @@ struct FaceCaptureView: View {
                 }
 
                 ToolbarItem(placement: .principal) {
-                    Text(showingPreview ? "Preview" : "Take Photo")
+                    Text(navigationTitle)
                         .foregroundColor(.white)
                         .fontWeight(.semibold)
                 }
@@ -45,9 +61,25 @@ struct FaceCaptureView: View {
         }
         .onAppear {
             cameraManager.startSession()
+            cameraManager.onFaceDetection = { detected, quality in
+                self.isFaceDetected = detected
+                self.faceQuality = quality
+            }
         }
         .onDisappear {
             cameraManager.stopSession()
+        }
+    }
+
+    private var navigationTitle: String {
+        if showingAnalysisResults {
+            return "Analysis Results"
+        } else if analysisCoordinator.isAnalyzing {
+            return "Analyzing..."
+        } else if showingPreview {
+            return "Processing"
+        } else {
+            return "Take Photo"
         }
     }
 
@@ -57,20 +89,31 @@ struct FaceCaptureView: View {
         VStack(spacing: 0) {
             Spacer()
 
-            // Camera preview
-            CameraPreviewView(session: cameraManager.session)
-                .aspectRatio(3/4, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 20))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(Color.white.opacity(0.3), lineWidth: 2)
+            // Camera preview with overlay
+            ZStack {
+                CameraPreviewView(session: cameraManager.session)
+                    .aspectRatio(3/4, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(frameColor, lineWidth: 2)
+                    )
+
+                // Face detection overlay
+                FaceAnalysisOverlayView(
+                    isFaceDetected: isFaceDetected,
+                    faceQuality: faceQuality,
+                    isAnalyzing: false,
+                    analysisProgress: 0
                 )
-                .padding(.horizontal, 20)
+                .clipShape(RoundedRectangle(cornerRadius: 20))
+            }
+            .padding(.horizontal, 20)
 
             Spacer()
 
             // Instructions
-            Text("Position your face in the frame")
+            Text(instructionText)
                 .font(.subheadline)
                 .foregroundColor(.white.opacity(0.8))
                 .padding(.bottom, 20)
@@ -93,52 +136,59 @@ struct FaceCaptureView: View {
         }
     }
 
-    // MARK: - Preview View
+    private var frameColor: Color {
+        if isFaceDetected {
+            return faceQuality > 0.7 ? .green.opacity(0.8) : .yellow.opacity(0.8)
+        }
+        return .white.opacity(0.3)
+    }
 
-    private func previewView(image: UIImage) -> some View {
+    private var instructionText: String {
+        if !isFaceDetected {
+            return "Position your face in the frame"
+        } else if faceQuality < 0.7 {
+            return "Hold steady for better quality"
+        } else {
+            return "Ready to capture"
+        }
+    }
+
+    // MARK: - Analyzing Preview View
+
+    private func analyzingPreviewView(image: UIImage) -> some View {
         VStack(spacing: 0) {
             Spacer()
 
-            // Image preview
-            Image(uiImage: image)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 20))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20)
-                        .stroke(Color.white.opacity(0.3), lineWidth: 2)
+            ZStack {
+                // Image preview
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 20))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 20)
+                            .stroke(Color.white.opacity(0.3), lineWidth: 2)
+                    )
+                    .blur(radius: 3)
+
+                // Analysis progress overlay
+                AnalysisProgressOverlay(
+                    progress: analysisCoordinator.analysisProgress,
+                    currentStep: analysisCoordinator.currentStep,
+                    onCancel: {
+                        retakePhoto()
+                    }
                 )
-                .padding(.horizontal, 20)
+            }
+            .padding(.horizontal, 20)
 
             Spacer()
 
-            // Action buttons
-            HStack(spacing: 40) {
-                // Retake button
-                Button(action: retakePhoto) {
-                    VStack(spacing: 8) {
-                        Image(systemName: "arrow.counterclockwise")
-                            .font(.system(size: 24))
-                        Text("Retake")
-                            .font(.caption)
-                    }
-                    .foregroundColor(.white)
-                    .frame(width: 80)
-                }
-
-                // Use photo button
-                Button(action: usePhoto) {
-                    VStack(spacing: 8) {
-                        Image(systemName: "checkmark.circle.fill")
-                            .font(.system(size: 44))
-                        Text("Use Photo")
-                            .font(.caption)
-                    }
-                    .foregroundColor(.green)
-                    .frame(width: 80)
-                }
-            }
-            .padding(.bottom, 40)
+            // Status text
+            Text(analysisCoordinator.currentStep)
+                .font(.subheadline)
+                .foregroundColor(.white.opacity(0.8))
+                .padding(.bottom, 40)
         }
     }
 
@@ -147,22 +197,32 @@ struct FaceCaptureView: View {
     private func capturePhoto() {
         cameraManager.capturePhoto { image in
             DispatchQueue.main.async {
+                guard let image = image else { return }
+
                 self.capturedImage = image
                 self.showingPreview = true
+
+                // Start analysis
+                self.analysisCoordinator.analyze(image: image) { metrics in
+                    self.analyzedMetrics = metrics
+                    self.showingAnalysisResults = true
+                }
             }
         }
     }
 
     private func retakePhoto() {
         capturedImage = nil
+        analyzedMetrics = nil
         showingPreview = false
+        showingAnalysisResults = false
         cameraManager.startSession()
     }
 
     private func usePhoto() {
         guard let image = capturedImage else { return }
         cameraManager.stopSession()
-        onCapture(image)
+        onCapture(image, analyzedMetrics)
         dismiss()
     }
 }
@@ -174,7 +234,16 @@ class CameraManager: NSObject, ObservableObject {
 
     let session = AVCaptureSession()
     private let photoOutput = AVCapturePhotoOutput()
+    private let videoOutput = AVCaptureVideoDataOutput()
     private var captureCompletion: ((UIImage?) -> Void)?
+    private let visionAnalyzer = VisionFaceAnalyzer()
+
+    // Face detection callback
+    var onFaceDetection: ((Bool, Double) -> Void)?
+
+    private let processingQueue = DispatchQueue(label: "com.sharehealth.facedetection", qos: .userInteractive)
+    private var lastProcessingTime = Date()
+    private let processingInterval: TimeInterval = 0.1 // 10 FPS for face detection
 
     override init() {
         super.init()
@@ -200,6 +269,13 @@ class CameraManager: NSObject, ObservableObject {
 
             if session.canAddOutput(photoOutput) {
                 session.addOutput(photoOutput)
+            }
+
+            // Add video output for real-time face detection
+            videoOutput.setSampleBufferDelegate(self, queue: processingQueue)
+            videoOutput.alwaysDiscardsLateVideoFrames = true
+            if session.canAddOutput(videoOutput) {
+                session.addOutput(videoOutput)
             }
 
             session.commitConfiguration()
@@ -257,6 +333,20 @@ extension CameraManager: AVCapturePhotoCaptureDelegate {
     }
 }
 
+extension CameraManager: AVCaptureVideoDataOutputSampleBufferDelegate {
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        // Throttle processing
+        let now = Date()
+        guard now.timeIntervalSince(lastProcessingTime) >= processingInterval else { return }
+        lastProcessingTime = now
+
+        // Perform face detection
+        visionAnalyzer.analyzeRealtime(sampleBuffer: sampleBuffer) { [weak self] detected, quality in
+            self?.onFaceDetection?(detected, quality)
+        }
+    }
+}
+
 // MARK: - Camera Preview View
 
 struct CameraPreviewView: UIViewRepresentable {
@@ -294,7 +384,7 @@ struct CameraPreviewView: UIViewRepresentable {
 
 #Preview {
     FaceCaptureView(
-        onCapture: { _ in },
+        onCapture: { _, _ in },
         onCancel: { }
     )
 }

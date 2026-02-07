@@ -71,8 +71,8 @@ struct HealthExportView: View {
         }
         .fullScreenCover(isPresented: $showingFaceCapture) {
             FaceCaptureView(
-                onCapture: { image in
-                    handleFaceCaptured(image)
+                onCapture: { image, metrics in
+                    handleFaceCaptured(image, metrics: metrics)
                 },
                 onCancel: {
                     // User cancelled - cancel the entire export
@@ -492,7 +492,7 @@ struct HealthExportView: View {
         }
     }
 
-    private func handleFaceCaptured(_ image: UIImage) {
+    private func handleFaceCaptured(_ image: UIImage, metrics: FacialMetrics?) {
         // If this is a share sheet export, store the image and complete the share sheet flow
         if isShareSheetExport {
             capturedImageForSharing = image
@@ -537,8 +537,16 @@ struct HealthExportView: View {
                 try imageData.write(to: imageURL)
                 print("Face image saved to: \(imageURL.path)")
             }
+
+            // Save the facial metrics JSON alongside the image
+            if let metrics = metrics {
+                let jsonName = "Face-\(timestamp).json"
+                let jsonURL = facesFolder.appendingPathComponent(jsonName)
+                try FaceAnalysisCoordinator.saveMetrics(metrics, to: jsonURL)
+                print("Face metrics saved to: \(jsonURL.path)")
+            }
         } catch {
-            print("Failed to save face image: \(error.localizedDescription)")
+            print("Failed to save face data: \(error.localizedDescription)")
             // Continue with export even if face save fails
         }
 
