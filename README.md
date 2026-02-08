@@ -16,15 +16,53 @@ An iOS app for exporting Apple Health data to CSV files, with **on-device machin
 
 ## Screenshots
 
+### Main Menu & Face to Health
 <p align="center">
-  <img src="AppStoreScreenshots/1-screenshot.png" alt="Main Menu" width="180">
-  <img src="AppStoreScreenshots/2-screenshot.png" alt="Health Export" width="180">
-  <img src="AppStoreScreenshots/3-screenshot.png" alt="Historical Export" width="180">
+  <img src="AppStoreScreenshots/1-screenshot.png" alt="Main Menu" width="200">
+  <img src="AppStoreScreenshots/1.1-screenshot.png" alt="Face to Health - Initial" width="200">
+  <img src="AppStoreScreenshots/1.2-screenshot.png" alt="Face to Health - With Data" width="200">
 </p>
 <p align="center">
-  <img src="AppStoreScreenshots/4-screenshot.png" alt="Share Steps" width="180">
-  <img src="AppStoreScreenshots/5-screenshot.png" alt="Share Message" width="180">
-  <img src="AppStoreScreenshots/6-screenshot.png" alt="Import Steps" width="180">
+  <em>Main Menu | Face to Health (Initial) | Face to Health (With Data & Menu)</em>
+</p>
+
+### Model Training & Analysis
+<p align="center">
+  <img src="AppStoreScreenshots/1.3-screenshot.png" alt="Model Training Status" width="200">
+  <img src="AppStoreScreenshots/1.4-screenshot.png" alt="Heart Rate Analysis" width="200">
+  <img src="AppStoreScreenshots/1.5-screenshot.png" alt="Sleep Score Analysis" width="200">
+</p>
+<p align="center">
+  <em>Training Status & R Values | Heart Rate LOO-CV Analysis | Sleep Score Analysis</em>
+</p>
+
+### Data Point Details & Health Export
+<p align="center">
+  <img src="AppStoreScreenshots/1.6-screenshot.png" alt="Data Point Details" width="200">
+  <img src="AppStoreScreenshots/2-screenshot.png" alt="Health Export" width="200">
+  <img src="AppStoreScreenshots/3-screenshot.png" alt="Historical Export" width="200">
+</p>
+<p align="center">
+  <em>Individual Capture Details | Health Export | Historical Date Range Export</em>
+</p>
+
+### Share Steps Feature
+<p align="center">
+  <img src="AppStoreScreenshots/4-screenshot.png" alt="Share Steps" width="200">
+  <img src="AppStoreScreenshots/5-screenshot.png" alt="Share Message" width="200">
+  <img src="AppStoreScreenshots/6-screenshot.png" alt="Import Steps" width="200">
+</p>
+<p align="center">
+  <em>Share Your Steps | Send via Message | Receive & Import Steps</em>
+</p>
+
+### Onboarding & Permissions
+<p align="center">
+  <img src="AppStoreScreenshots/7-screenshot.png" alt="Welcome Screen" width="200">
+  <img src="AppStoreScreenshots/8-screenshot.png" alt="Health Permissions" width="200">
+</p>
+<p align="center">
+  <em>Welcome & HealthKit Explanation | iOS Health Permission Dialog</em>
 </p>
 
 ## Features
