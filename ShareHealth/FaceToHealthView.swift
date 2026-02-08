@@ -1107,9 +1107,11 @@ private struct ModelStatusRow: View {
                                     .font(.caption)
                                     .foregroundColor(.blue)
                             }
-                            Text(errorMessage.prefix(30) + (errorMessage.count > 30 ? "..." : ""))
+                            Text(errorMessage)
                                 .font(.caption2)
                                 .foregroundColor(.red)
+                                .lineLimit(2)
+                                .truncationMode(.tail)
                         }
                     }
                 }

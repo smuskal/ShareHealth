@@ -459,7 +459,8 @@ class FaceHealthModelTrainer {
     // MARK: - Model Persistence
 
     func getModelCorrelation(for targetId: String) -> Double? {
-        let metadataURL = modelsDirectory.appendingPathComponent("\(targetId)_metadata.json")
+        let safeId = sanitizeForFilename(targetId)
+        let metadataURL = modelsDirectory.appendingPathComponent("\(safeId)_metadata.json")
         guard fileManager.fileExists(atPath: metadataURL.path),
               let data = try? Data(contentsOf: metadataURL),
               let metadata = try? JSONDecoder().decode(ModelMetadata.self, from: data) else {
@@ -468,9 +469,17 @@ class FaceHealthModelTrainer {
         return metadata.correlation
     }
 
+    /// Sanitize a target ID for use as a filename (remove special characters)
+    private func sanitizeForFilename(_ targetId: String) -> String {
+        // Replace problematic characters with underscores
+        let invalidChars = CharacterSet(charactersIn: "/\\:*?\"<>|()[]{}#%&")
+        return targetId.components(separatedBy: invalidChars).joined(separator: "_")
+    }
+
     private func saveModel(_ model: LinearRegressionModel, for targetId: String, correlation: Double) throws {
-        let modelURL = modelsDirectory.appendingPathComponent("\(targetId)_model.json")
-        let metadataURL = modelsDirectory.appendingPathComponent("\(targetId)_metadata.json")
+        let safeId = sanitizeForFilename(targetId)
+        let modelURL = modelsDirectory.appendingPathComponent("\(safeId)_model.json")
+        let metadataURL = modelsDirectory.appendingPathComponent("\(safeId)_metadata.json")
 
         let modelData = try JSONEncoder().encode(model)
         try modelData.write(to: modelURL)
@@ -486,7 +495,8 @@ class FaceHealthModelTrainer {
     }
 
     private func loadModel(for targetId: String) -> LinearRegressionModel? {
-        let modelURL = modelsDirectory.appendingPathComponent("\(targetId)_model.json")
+        let safeId = sanitizeForFilename(targetId)
+        let modelURL = modelsDirectory.appendingPathComponent("\(safeId)_model.json")
         guard fileManager.fileExists(atPath: modelURL.path),
               let data = try? Data(contentsOf: modelURL),
               let model = try? JSONDecoder().decode(LinearRegressionModel.self, from: data) else {
@@ -497,8 +507,9 @@ class FaceHealthModelTrainer {
 
     /// Delete model for target
     func deleteModel(for targetId: String) {
-        let modelURL = modelsDirectory.appendingPathComponent("\(targetId)_model.json")
-        let metadataURL = modelsDirectory.appendingPathComponent("\(targetId)_metadata.json")
+        let safeId = sanitizeForFilename(targetId)
+        let modelURL = modelsDirectory.appendingPathComponent("\(safeId)_model.json")
+        let metadataURL = modelsDirectory.appendingPathComponent("\(safeId)_metadata.json")
         try? fileManager.removeItem(at: modelURL)
         try? fileManager.removeItem(at: metadataURL)
     }
@@ -560,19 +571,20 @@ class FaceHealthModelTrainer {
         // Copy model files for each target
         var savedTargets: [String] = []
         for targetId in targetIds {
-            let modelURL = modelsDirectory.appendingPathComponent("\(targetId)_model.json")
-            let metadataURL = modelsDirectory.appendingPathComponent("\(targetId)_metadata.json")
+            let safeId = sanitizeForFilename(targetId)
+            let modelURL = modelsDirectory.appendingPathComponent("\(safeId)_model.json")
+            let metadataURL = modelsDirectory.appendingPathComponent("\(safeId)_metadata.json")
 
             if fileManager.fileExists(atPath: modelURL.path) {
                 try fileManager.copyItem(
                     at: modelURL,
-                    to: snapshotDir.appendingPathComponent("\(targetId)_model.json")
+                    to: snapshotDir.appendingPathComponent("\(safeId)_model.json")
                 )
             }
             if fileManager.fileExists(atPath: metadataURL.path) {
                 try fileManager.copyItem(
                     at: metadataURL,
-                    to: snapshotDir.appendingPathComponent("\(targetId)_metadata.json")
+                    to: snapshotDir.appendingPathComponent("\(safeId)_metadata.json")
                 )
                 savedTargets.append(targetId)
             }
@@ -604,10 +616,11 @@ class FaceHealthModelTrainer {
 
         // Copy model files back to models directory
         for targetId in metadata.targetIds {
-            let srcModel = snapshotDir.appendingPathComponent("\(targetId)_model.json")
-            let srcMetadata = snapshotDir.appendingPathComponent("\(targetId)_metadata.json")
-            let dstModel = modelsDirectory.appendingPathComponent("\(targetId)_model.json")
-            let dstMetadata = modelsDirectory.appendingPathComponent("\(targetId)_metadata.json")
+            let safeId = sanitizeForFilename(targetId)
+            let srcModel = snapshotDir.appendingPathComponent("\(safeId)_model.json")
+            let srcMetadata = snapshotDir.appendingPathComponent("\(safeId)_metadata.json")
+            let dstModel = modelsDirectory.appendingPathComponent("\(safeId)_model.json")
+            let dstMetadata = modelsDirectory.appendingPathComponent("\(safeId)_metadata.json")
 
             // Remove existing files first
             try? fileManager.removeItem(at: dstModel)
