@@ -12,11 +12,7 @@ An iOS app for exporting Apple Health data to CSV files, with **on-device machin
 
 ## What's New in 5.3
 
-**Random Forest Models** - Choose between Linear Regression and Random Forest for your Face to Health predictions. Random Forest can capture non-linear relationships and provides feature importance rankings showing which facial features matter most for each health metric.
-
-## What's New in 5.0
-
-**Face to Health** - Train personalized machine learning models that predict your health metrics from facial analysis alone. This groundbreaking feature uses MediaPipe face mesh analysis to extract 24 facial features and correlate them with your Apple Health data over time.
+**Face to Health** - Train personalized machine learning models that predict your health metrics from facial analysis alone. Uses MediaPipe face mesh to extract 24 facial features and correlate them with your Apple Health data over time. Choose between Linear Regression for interpretable insights or Random Forest to capture non-linear patterns. Feature importance rankings show which facial features matter most for each health metric.
 
 ## Screenshots
 
@@ -341,8 +337,7 @@ This app:
 
 ## Version History
 
-- **5.3** - **Random Forest Models**: Added Random Forest as an alternative to Linear Regression for Face to Health predictions. Model type selector persists user preference. Feature importance visualization works with both model types.
-- **5.0 (Build 1)** - **Face to Health**: On-device machine learning to predict health metrics from facial analysis. MediaPipe face mesh with 24 features, ridge regression with leave-one-out cross-validation, scatter plots, feature importance visualization, custom prediction targets, Sleep Score calculation, bulk import from exports, health data backfill
+- **5.3** - **Face to Health**: On-device machine learning to predict health metrics from facial analysis. MediaPipe face mesh with 24 features, Linear Regression and Random Forest model options, leave-one-out cross-validation, scatter plots, feature importance visualization, custom prediction targets, Sleep Score calculation, bulk import from exports, health data backfill
 - **3.2 (Build 2)** - Bug fixes and improvements
 - **3.0 (Build 3)** - Historical export with date range selection, bedtime/wake time fields as decimal hours for ML/analytics, time in bed tracking, year/month folder organization, export logging with View Log feature, automatic earliest available date detection, 30-second per-day timeout protection, screen stays awake during batch exports
 - **3.0 (Build 2)** - Initial 3.0 release with historical export foundation
