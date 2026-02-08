@@ -327,12 +327,9 @@ extension CameraManager: AVCapturePhotoCaptureDelegate {
             return
         }
 
-        // Apply horizontal flip for front camera captures.
-        // The front camera captures a non-mirrored image by default, but users expect
-        // the saved image to match the mirrored preview they see (like a mirror).
-        // Flipping ensures text on clothing etc. reads correctly in stored images.
-        let flippedImage = image.flippedHorizontally()
-        captureCompletion?(flippedImage)
+        // Front camera captures a non-mirrored image by default (text is readable).
+        // Do NOT flip - we want text on clothing to be readable in the saved image.
+        captureCompletion?(image)
     }
 }
 

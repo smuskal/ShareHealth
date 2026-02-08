@@ -248,18 +248,33 @@ struct FaceHistoryView: View {
             Color.black.opacity(0.5).ignoresSafeArea()
 
             VStack(spacing: 16) {
+                HStack {
+                    ProgressView()
+                        .tint(.white)
+                    Text("Importing...")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                }
+
                 ProgressView(value: importer.importProgress)
-                    .progressViewStyle(LinearProgressViewStyle(tint: .white))
-                    .frame(width: 200)
+                    .progressViewStyle(LinearProgressViewStyle(tint: .blue))
+                    .frame(width: 220)
 
                 Text(importer.currentFile)
                     .font(.caption)
-                    .foregroundColor(.white)
+                    .foregroundColor(.white.opacity(0.8))
                     .lineLimit(1)
+                    .frame(maxWidth: 220)
 
-                Text("\(importer.importedCount) imported, \(importer.skippedCount) skipped")
-                    .font(.caption2)
-                    .foregroundColor(.white.opacity(0.7))
+                HStack(spacing: 20) {
+                    Label("\(importer.importedCount)", systemImage: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                    Label("\(importer.skippedCount)", systemImage: "arrow.right.circle.fill")
+                        .foregroundColor(.orange)
+                    Label("\(importer.errorCount)", systemImage: "xmark.circle.fill")
+                        .foregroundColor(.red)
+                }
+                .font(.subheadline)
             }
             .padding(24)
             .background(Color(.systemGray5))

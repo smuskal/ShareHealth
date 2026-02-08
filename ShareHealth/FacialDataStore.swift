@@ -64,7 +64,7 @@ class FacialDataStore: ObservableObject {
         let timestamp = formatter.string(from: date)
         let baseFilename = "Face-\(timestamp)"
 
-        // Save image
+        // Save image as-is (no transformation)
         let imageURL = directory.appendingPathComponent("\(baseFilename).jpg")
         guard let imageData = image.jpegData(compressionQuality: 0.85) else {
             throw FacialDataStoreError.imageEncodingFailed
@@ -93,11 +93,14 @@ class FacialDataStore: ObservableObject {
     // MARK: - Load Captures
 
     /// Load all stored captures
-    func loadCaptures() {
+    func loadCaptures(completion: (() -> Void)? = nil) {
         isLoading = true
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            guard let self = self else { return }
+            guard let self = self else {
+                DispatchQueue.main.async { completion?() }
+                return
+            }
 
             var allCaptures: [StoredFaceCapture] = []
 
@@ -128,6 +131,7 @@ class FacialDataStore: ObservableObject {
                 self.captures = allCaptures
                 self.captureCount = allCaptures.count
                 self.isLoading = false
+                completion?()
             }
         }
     }
@@ -368,6 +372,18 @@ enum FacialDataStoreError: LocalizedError {
 // MARK: - Image Utilities
 
 extension UIImage {
+    /// Normalize image orientation by rendering to a new context.
+    /// This ensures pixel data matches visual display and avoids EXIF orientation issues.
+    func normalizedOrientation() -> UIImage {
+        guard imageOrientation != .up else { return self }
+
+        UIGraphicsBeginImageContextWithOptions(size, false, scale)
+        defer { UIGraphicsEndImageContext() }
+
+        draw(in: CGRect(origin: .zero, size: size))
+        return UIGraphicsGetImageFromCurrentImageContext() ?? self
+    }
+
     /// Flip the image horizontally by transforming actual pixel data.
     /// This creates a new image with flipped pixels, not just orientation metadata.
     func flippedHorizontally() -> UIImage {

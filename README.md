@@ -136,7 +136,6 @@ All exports are organized into year/month subfolders:
       /01/
         Face-2024-01-15_143022.jpg
         Face-2024-01-15_143022.json      # Facial metrics
-        Face-2024-01-15_143022_health.json  # Health data snapshot
         ...
 ```
 
@@ -348,7 +347,7 @@ Documents/
         └── MM/                            # Month folder (01-12)
             ├── Face-YYYY-MM-DD_HHMMSS.jpg         # Face image (JPEG, 85% quality)
             ├── Face-YYYY-MM-DD_HHMMSS.json        # Facial metrics (24 features)
-            └── Face-YYYY-MM-DD_HHMMSS_health.json # Health snapshot from Apple Health
+            └── Face-YYYY-MM-DD_HHMMSS_health.json # Health snapshot (local only, not exported)
 ```
 
 ### File Naming Convention
@@ -406,7 +405,7 @@ The `.json` file contains 24 MediaPipe-compatible facial features:
 
 ### Health Snapshot JSON Structure
 
-The `_health.json` file contains Apple Health data from that day:
+The `_health.json` file is stored **locally only** (not exported) and contains Apple Health data from that day:
 
 ```json
 {
@@ -437,28 +436,25 @@ export-folder/
     └── 2024/
         └── 03/
             ├── Face-2024-03-15_143022.jpg
-            ├── Face-2024-03-15_143022.json
-            └── Face-2024-03-15_143022_health.json
+            └── Face-2024-03-15_143022.json
 
 # Option 2: Flat structure
 export-folder/
 ├── Face-2024-03-15_143022.jpg
-├── Face-2024-03-15_143022.json
-└── Face-2024-03-15_143022_health.json
+└── Face-2024-03-15_143022.json
 
 # Option 3: AI Steve pipeline (annotations subfolder)
 export-folder/
 ├── Face-2024-03-15_143022.jpg
-├── annotations/
-│   └── mediapipe/
-│       └── Face-2024-03-15_143022.json
-└── Face-2024-03-15_143022_health.json
+└── annotations/
+    └── mediapipe/
+        └── Face-2024-03-15_143022.json
 ```
 
 **Import Requirements:**
 - Image filename must be `Face-YYYY-MM-DD_HHMMSS.jpg`
 - Metrics JSON is **required** (same name with `.json`)
-- Health JSON is **optional** (use Backfill to fetch from Apple Health)
+- Use Backfill to fetch health data from Apple Health after import
 
 **After Import:**
 - Health data is automatically backfilled if missing

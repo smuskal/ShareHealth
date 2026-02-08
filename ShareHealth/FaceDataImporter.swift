@@ -10,15 +10,20 @@ class FaceDataImporter: ObservableObject {
     @Published var importedCount = 0
     @Published var skippedCount = 0
     @Published var errorCount = 0
+    @Published var lastErrorReason: String = ""
 
     private let fileManager = FileManager.default
     private let dataStore = FacialDataStore.shared
+
+    // Track error reasons for debugging
+    private var errorReasons: [String: Int] = [:]
 
     struct ImportResult {
         let imported: Int
         let skipped: Int
         let errors: Int
         let message: String
+        let errorDetails: String
     }
 
     /// Import face data from an export folder
@@ -33,11 +38,14 @@ class FaceDataImporter: ObservableObject {
         }
 
         DispatchQueue.global(qos: .userInitiated).async {
+            // Reset error tracking
+            self.errorReasons = [:]
+
             // Start accessing security-scoped resource
             guard url.startAccessingSecurityScopedResource() else {
                 DispatchQueue.main.async {
                     self.isImporting = false
-                    completion(ImportResult(imported: 0, skipped: 0, errors: 1, message: "Cannot access the selected folder"))
+                    completion(ImportResult(imported: 0, skipped: 0, errors: 1, message: "Cannot access the selected folder", errorDetails: "Security access denied"))
                 }
                 return
             }
@@ -51,7 +59,7 @@ class FaceDataImporter: ObservableObject {
             if totalFiles == 0 {
                 DispatchQueue.main.async {
                     self.isImporting = false
-                    completion(ImportResult(imported: 0, skipped: 0, errors: 0, message: "No face images found in the selected folder"))
+                    completion(ImportResult(imported: 0, skipped: 0, errors: 0, message: "No face images found in the selected folder", errorDetails: ""))
                 }
                 return
             }
@@ -61,7 +69,9 @@ class FaceDataImporter: ObservableObject {
             var errors = 0
 
             for (index, imageURL) in faceImages.enumerated() {
-                DispatchQueue.main.async {
+                // Update progress on main thread and wait for it to complete
+                // This ensures the UI updates are visible during import
+                DispatchQueue.main.sync {
                     self.currentFile = imageURL.lastPathComponent
                     self.importProgress = Double(index) / Double(totalFiles)
                 }
@@ -72,34 +82,44 @@ class FaceDataImporter: ObservableObject {
                     imported += 1
                 case .skipped:
                     skipped += 1
-                case .error:
+                case .error(let reason):
                     errors += 1
+                    self.errorReasons[reason, default: 0] += 1
                 }
 
-                DispatchQueue.main.async {
+                // Update counts on main thread synchronously so UI reflects changes
+                DispatchQueue.main.sync {
                     self.importedCount = imported
                     self.skippedCount = skipped
                     self.errorCount = errors
+                    if case .error(let reason) = result {
+                        self.lastErrorReason = reason
+                    }
                 }
             }
 
+            // Build error details string
+            let errorDetails = self.errorReasons.map { "\($0.key): \($0.value)" }.joined(separator: ", ")
+
             // Reload the data store and mark models as needing retraining
-            DispatchQueue.main.async {
-                self.dataStore.loadCaptures()
-                self.isImporting = false
-                self.importProgress = 1.0
+            self.dataStore.loadCaptures {
+                DispatchQueue.main.async {
+                    self.isImporting = false
+                    self.importProgress = 1.0
 
-                // Mark models as needing retraining if we imported any
-                if imported > 0 {
-                    self.dataStore.dataVersion += 1
-                    self.dataStore.modelsNeedRetraining = true
+                    // Mark models as needing retraining if we imported any
+                    if imported > 0 {
+                        self.dataStore.dataVersion += 1
+                        self.dataStore.modelsNeedRetraining = true
+                    }
+
+                    var message = "Imported \(imported) captures"
+                    if skipped > 0 { message += ", skipped \(skipped) duplicates" }
+                    if errors > 0 { message += ", \(errors) errors" }
+                    if !errorDetails.isEmpty { message += "\n\nError details: \(errorDetails)" }
+
+                    completion(ImportResult(imported: imported, skipped: skipped, errors: errors, message: message, errorDetails: errorDetails))
                 }
-
-                let message = "Imported \(imported) captures" +
-                    (skipped > 0 ? ", skipped \(skipped) duplicates" : "") +
-                    (errors > 0 ? ", \(errors) errors" : "")
-
-                completion(ImportResult(imported: imported, skipped: skipped, errors: errors, message: message))
             }
         }
     }
@@ -132,7 +152,7 @@ class FaceDataImporter: ObservableObject {
     private enum ImportStatus {
         case imported
         case skipped
-        case error
+        case error(String)  // Include error reason
     }
 
     private func importFaceCapture(imageURL: URL) -> ImportStatus {
@@ -144,7 +164,7 @@ class FaceDataImporter: ObservableObject {
         dateFormatter.dateFormat = "'Face-'yyyy-MM-dd_HHmmss"
         guard let captureDate = dateFormatter.date(from: baseName) else {
             print("Could not parse date from: \(baseName)")
-            return .error
+            return .error("Invalid filename format")
         }
 
         // Check if already imported (by checking if file exists in local storage)
@@ -152,13 +172,6 @@ class FaceDataImporter: ObservableObject {
         let localImageURL = localDirectory.appendingPathComponent("\(baseName).jpg")
         if fileManager.fileExists(atPath: localImageURL.path) {
             return .skipped
-        }
-
-        // Load image - import exactly as saved (no transformation)
-        guard let imageData = try? Data(contentsOf: imageURL),
-              let image = UIImage(data: imageData) else {
-            print("Could not load image: \(baseName)")
-            return .error
         }
 
         // Find metrics JSON in multiple possible locations:
@@ -170,6 +183,32 @@ class FaceDataImporter: ObservableObject {
         var metrics: FacialMetrics? = nil
         if let metricsURL = metricsURL {
             metrics = try? FaceAnalysisCoordinator.loadMetrics(from: metricsURL)
+            if metrics == nil {
+                print("Failed to parse metrics from: \(metricsURL.lastPathComponent)")
+            }
+        } else {
+            print("No metrics JSON found for: \(baseName), will analyze image")
+        }
+
+        // If no metrics JSON, try to analyze the image
+        if metrics == nil {
+            // Load the image and analyze it
+            if let imageData = try? Data(contentsOf: imageURL),
+               let image = UIImage(data: imageData) {
+                let analyzer = MediaPipeFaceAnalyzer()
+                let semaphore = DispatchSemaphore(value: 0)
+                analyzer.analyze(image: image) { result in
+                    metrics = result
+                    semaphore.signal()
+                }
+                semaphore.wait()
+            }
+        }
+
+        // If still no metrics, skip (we need metrics for model training)
+        guard let metrics = metrics else {
+            print("Could not analyze face in: \(baseName), skipping")
+            return .error("No face detected in image")
         }
 
         // Find health data JSON in multiple possible locations
@@ -183,46 +222,67 @@ class FaceDataImporter: ObservableObject {
             healthData = json
         }
 
-        // If no metrics, we need to analyze the image
-        if metrics == nil {
-            // For now, skip images without metrics
-            // In a future version, we could re-analyze them
-            print("No metrics found for: \(baseName), skipping")
-            return .error
-        }
-
-        // Save to local storage
+        // Copy files directly to local storage (no re-encoding to preserve exact pixels)
         do {
-            try dataStore.saveCapture(
-                image: image,
-                metrics: metrics!,
-                healthData: healthData,
-                date: captureDate
-            )
+            // Ensure local directory exists
+            if !fileManager.fileExists(atPath: localDirectory.path) {
+                try fileManager.createDirectory(at: localDirectory, withIntermediateDirectories: true)
+            }
+
+            // Copy image file directly (preserves exact pixels, no re-encoding)
+            try fileManager.copyItem(at: imageURL, to: localImageURL)
+
+            // Save metrics JSON
+            let localMetricsURL = localDirectory.appendingPathComponent("\(baseName).json")
+            try FaceAnalysisCoordinator.saveMetrics(metrics, to: localMetricsURL)
+
+            // Save health data JSON
+            let localHealthURL = localDirectory.appendingPathComponent("\(baseName)_health.json")
+            let healthJSON = try JSONSerialization.data(withJSONObject: healthData, options: [.prettyPrinted, .sortedKeys])
+            try healthJSON.write(to: localHealthURL)
+
+            print("Imported face capture: \(baseName)")
             return .imported
         } catch {
-            print("Failed to save: \(error)")
-            return .error
+            print("Failed to import \(baseName): \(error)")
+            return .error("File copy failed: \(error.localizedDescription)")
         }
     }
 
     /// Find metrics JSON file in various possible locations
     private func findMetricsFile(baseName: String, imageDirectory: URL) -> URL? {
-        // Possible locations for metrics JSON:
-        let possiblePaths = [
-            // 1. Same directory as image: Face-*.json
-            imageDirectory.appendingPathComponent("\(baseName).json"),
-            // 2. annotations/mediapipe/ subdirectory (AI Steve pipeline)
-            imageDirectory.appendingPathComponent("annotations/mediapipe/\(baseName).json"),
-            // 3. Just mediapipe/ subdirectory
-            imageDirectory.appendingPathComponent("mediapipe/\(baseName).json"),
-        ]
+        // Build list of possible paths - check multiple directory levels
+        var possiblePaths: [URL] = []
+
+        // 1. Same directory as image: Face-*.json
+        possiblePaths.append(imageDirectory.appendingPathComponent("\(baseName).json"))
+
+        // 2. Subdirectories of image directory
+        possiblePaths.append(imageDirectory.appendingPathComponent("annotations/mediapipe/\(baseName).json"))
+        possiblePaths.append(imageDirectory.appendingPathComponent("mediapipe/\(baseName).json"))
+        possiblePaths.append(imageDirectory.appendingPathComponent("annotations/\(baseName).json"))
+
+        // 3. Go up directory levels and look for annotations folder
+        // Structure might be: export/faces/YYYY/MM/image.jpg and export/annotations/mediapipe/image.json
+        var parentDir = imageDirectory
+        for _ in 0..<5 {  // Go up to 5 levels
+            parentDir = parentDir.deletingLastPathComponent()
+            possiblePaths.append(parentDir.appendingPathComponent("annotations/mediapipe/\(baseName).json"))
+            possiblePaths.append(parentDir.appendingPathComponent("annotations/\(baseName).json"))
+            possiblePaths.append(parentDir.appendingPathComponent("mediapipe/\(baseName).json"))
+            possiblePaths.append(parentDir.appendingPathComponent("\(baseName).json"))
+        }
 
         for path in possiblePaths {
             if fileManager.fileExists(atPath: path.path) {
+                print("Found metrics at: \(path.path)")
                 return path
             }
         }
+
+        // Debug: print what we looked for
+        print("Could not find metrics for \(baseName) in any of \(possiblePaths.count) locations")
+        print("Image directory: \(imageDirectory.path)")
 
         return nil
     }
