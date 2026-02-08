@@ -20,7 +20,7 @@ An iOS app for exporting Apple Health data to CSV files, with **on-device machin
 
 ## Screenshots
 
-### Main Menu & Face to Health
+### Face to Health - Getting Started
 <p align="center">
   <img src="AppStoreScreenshots/1-screenshot.png" alt="Main Menu" width="200">
   <img src="AppStoreScreenshots/1.1-screenshot.png" alt="Face to Health - Initial" width="200">
@@ -30,24 +30,32 @@ An iOS app for exporting Apple Health data to CSV files, with **on-device machin
   <em>Main Menu | Face to Health (Initial) | Face to Health (With Data & Menu)</em>
 </p>
 
-### Model Training & Analysis
+### Face to Health - Model Type Selection (5.3)
 <p align="center">
-  <img src="AppStoreScreenshots/1.3-screenshot.png" alt="Model Training Status" width="200">
-  <img src="AppStoreScreenshots/1.4-screenshot.png" alt="Heart Rate Analysis" width="200">
-  <img src="AppStoreScreenshots/1.5-screenshot.png" alt="Sleep Score Analysis" width="200">
+  <img src="AppStoreScreenshots/5.3-model-type-dropdown.png" alt="Model Type Dropdown" width="200">
+  <img src="AppStoreScreenshots/5.3-model-snapshots.png" alt="Model Snapshots & Predict" width="200">
 </p>
 <p align="center">
-  <em>Training Status & R Values | Heart Rate LOO-CV Analysis | Sleep Score Analysis</em>
+  <em>Choose Linear Regression or Random Forest | Model Snapshots & Predict My Health</em>
 </p>
 
-### Data Point Details & Health Export
+### Leave-One-Out Cross-Validation Analysis (5.3)
 <p align="center">
-  <img src="AppStoreScreenshots/1.6-screenshot.png" alt="Data Point Details" width="200">
+  <img src="AppStoreScreenshots/5.3-heart-rate-analysis.png" alt="Heart Rate LOO-CV Analysis" width="200">
+  <img src="AppStoreScreenshots/5.3-sleep-rem-analysis.png" alt="Sleep REM LOO-CV Analysis" width="200">
+  <img src="AppStoreScreenshots/5.3-data-point-details.png" alt="Data Point Details" width="200">
+</p>
+<p align="center">
+  <em>Resting Heart Rate Analysis (R=0.62) | Sleep REM Analysis (R=0.58) | Daily Captures Averaged</em>
+</p>
+
+### Health Export Features
+<p align="center">
   <img src="AppStoreScreenshots/2-screenshot.png" alt="Health Export" width="200">
   <img src="AppStoreScreenshots/3-screenshot.png" alt="Historical Export" width="200">
 </p>
 <p align="center">
-  <em>Individual Capture Details | Health Export | Historical Date Range Export</em>
+  <em>Single-Day Health Export | Historical Date Range Export</em>
 </p>
 
 ### Share Steps Feature
