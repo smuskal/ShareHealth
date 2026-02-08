@@ -41,6 +41,9 @@ struct FaceToHealthView: View {
     @State private var showingSnapshotResult = false
     @State private var snapshotResultMessage = ""
 
+    // Model type selection
+    @State private var selectedModelType: ModelType = FaceHealthModelTrainer.currentModelType
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -634,6 +637,27 @@ struct FaceToHealthView: View {
                 .padding(.top, 4)
             }
 
+            // Model type selection
+            HStack {
+                Text("Model Type")
+                    .font(.subheadline)
+                Spacer()
+                Picker("Model Type", selection: $selectedModelType) {
+                    ForEach(ModelType.allCases, id: \.self) { type in
+                        Text(type.displayName).tag(type)
+                    }
+                }
+                .pickerStyle(.menu)
+                .onChange(of: selectedModelType) { _, newValue in
+                    FaceHealthModelTrainer.currentModelType = newValue
+                    // Retrain models with new type
+                    if !viewModel.isTraining {
+                        viewModel.retrainAllModels()
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+
             // Model status for each selected target
             HStack {
                 Text("Model Status (LOO-CV)")
@@ -715,7 +739,7 @@ struct FaceToHealthView: View {
     private func timingNote(for targetId: String) -> String? {
         switch targetId {
         case "sleepScore":
-            return "Tonight"  // Predicts upcoming sleep
+            return "Last Night"  // Reflects most recent sleep
         case "hrv", "restingHR":
             return "Today"  // Reflects current state
         default:

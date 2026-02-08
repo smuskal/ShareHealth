@@ -10,6 +10,10 @@ An iOS app for exporting Apple Health data to CSV files, with **on-device machin
 
 **[Download on the App Store](https://apps.apple.com/us/app/sharehealth/id6738940089)**
 
+## What's New in 5.3
+
+**Random Forest Models** - Choose between Linear Regression and Random Forest for your Face to Health predictions. Random Forest can capture non-linear relationships and provides feature importance rankings showing which facial features matter most for each health metric.
+
 ## What's New in 5.0
 
 **Face to Health** - Train personalized machine learning models that predict your health metrics from facial analysis alone. This groundbreaking feature uses MediaPipe face mesh analysis to extract 24 facial features and correlate them with your Apple Health data over time.
@@ -69,7 +73,11 @@ An iOS app for exporting Apple Health data to CSV files, with **on-device machin
 
 ### Face to Health (NEW in 5.0)
 
-Train personalized machine learning models to predict your health metrics purely from facial analysis. After capturing enough face photos paired with health data, the app builds ridge regression models that learn YOUR unique face-to-health correlations.
+Train personalized machine learning models to predict your health metrics purely from facial analysis. After capturing enough face photos paired with health data, the app builds models that learn YOUR unique face-to-health correlations.
+
+**Model Types** (5.3+):
+- **Linear Regression** - Ridge regression for interpretable linear correlations
+- **Random Forest** - Ensemble of decision trees for capturing non-linear patterns
 
 #### How It Works
 
@@ -288,7 +296,7 @@ ShareHealth/
 ├── ShareStepsApp.swift          # App entry point
 ├── MainMenuView.swift           # Main navigation
 ├── FaceToHealthView.swift       # Face to Health main UI
-├── FaceHealthModelTrainer.swift # On-device ML training (ridge regression, LOO-CV)
+├── FaceHealthModelTrainer.swift # On-device ML training (ridge regression, random forest, LOO-CV)
 ├── ModelCVDetailView.swift      # Model visualization (scatter plots, feature importance)
 ├── FacialDataStore.swift        # Local face capture storage
 ├── MediaPipeFaceAnalyzer.swift  # 24-feature facial analysis
@@ -325,6 +333,7 @@ This app:
 
 ## Version History
 
+- **5.3** - **Random Forest Models**: Added Random Forest as an alternative to Linear Regression for Face to Health predictions. Model type selector persists user preference. Feature importance visualization works with both model types.
 - **5.0 (Build 1)** - **Face to Health**: On-device machine learning to predict health metrics from facial analysis. MediaPipe face mesh with 24 features, ridge regression with leave-one-out cross-validation, scatter plots, feature importance visualization, custom prediction targets, Sleep Score calculation, bulk import from exports, health data backfill
 - **3.2 (Build 2)** - Bug fixes and improvements
 - **3.0 (Build 3)** - Historical export with date range selection, bedtime/wake time fields as decimal hours for ML/analytics, time in bed tracking, year/month folder organization, export logging with View Log feature, automatic earliest available date detection, 30-second per-day timeout protection, screen stays awake during batch exports
@@ -521,7 +530,9 @@ Face to Health uses established computer vision and machine learning techniques:
 
 1. **MediaPipe Face Mesh** extracts 468 facial landmarks in real-time
 2. **Feature engineering** converts landmarks into 24 interpretable metrics (eye openness, brow position, smile intensity, etc.)
-3. **Ridge regression** (L2-regularized linear regression) learns correlations between facial features and health metrics
+3. **Model training** with your choice of algorithm:
+   - **Ridge regression** (L2-regularized linear regression) for interpretable linear correlations
+   - **Random Forest** (ensemble of 50 decision trees) for capturing non-linear patterns with feature importance
 4. **Leave-one-out cross-validation** provides honest accuracy estimates by testing each prediction on held-out data
 5. **Personalized models** - trained only on YOUR data, so they learn YOUR unique patterns
 

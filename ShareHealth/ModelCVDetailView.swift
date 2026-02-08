@@ -295,16 +295,28 @@ struct ModelCVDetailView: View {
 
     private var featureImportanceSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Top Predictive Features")
-                .font(.headline)
+            HStack {
+                Text("Top Predictive Features")
+                    .font(.headline)
+                Spacer()
+                if let modelType = trainer.getModelType(for: targetId) {
+                    Text(modelType.displayName)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 2)
+                        .background(Color(.systemGray5))
+                        .cornerRadius(4)
+                }
+            }
 
-            Text("Features with largest coefficients (most influence on prediction)")
+            Text("Features with most influence on prediction")
                 .font(.caption)
                 .foregroundColor(.secondary)
 
             if let importance = trainer.getFeatureImportance(for: targetId) {
                 let topFeatures = Array(importance.prefix(8))
-                let maxCoef = topFeatures.map { abs($0.coefficient) }.max() ?? 1
+                let maxImportance = topFeatures.map { $0.importance }.max() ?? 1
 
                 ForEach(Array(topFeatures.enumerated()), id: \.offset) { index, feature in
                     HStack {
@@ -315,48 +327,31 @@ struct ModelCVDetailView: View {
 
                         Text(feature.name)
                             .font(.caption)
-                            .frame(width: 100, alignment: .leading)
+                            .frame(width: 110, alignment: .leading)
 
                         GeometryReader { geo in
-                            let width = geo.size.width * CGFloat(abs(feature.coefficient) / maxCoef)
-                            let color: Color = feature.coefficient >= 0 ? .green : .red
+                            let width = geo.size.width * CGFloat(feature.importance / maxImportance)
 
                             HStack(spacing: 0) {
-                                if feature.coefficient < 0 {
-                                    Spacer()
-                                    Rectangle()
-                                        .fill(color.opacity(0.7))
-                                        .frame(width: width / 2)
-                                } else {
-                                    Rectangle()
-                                        .fill(color.opacity(0.7))
-                                        .frame(width: width / 2)
-                                    Spacer()
-                                }
+                                Rectangle()
+                                    .fill(Color.blue.opacity(0.7))
+                                    .frame(width: width)
+                                Spacer()
                             }
                         }
                         .frame(height: 12)
 
-                        Text(String(format: "%.2f", feature.coefficient))
+                        Text(String(format: "%.1f%%", feature.importance * 100))
                             .font(.caption2)
                             .foregroundColor(.secondary)
-                            .frame(width: 45, alignment: .trailing)
+                            .frame(width: 40, alignment: .trailing)
                     }
                 }
 
-                HStack {
-                    Circle().fill(Color.green.opacity(0.7)).frame(width: 10, height: 10)
-                    Text("Positive: higher value → higher prediction")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-
-                HStack {
-                    Circle().fill(Color.red.opacity(0.7)).frame(width: 10, height: 10)
-                    Text("Negative: higher value → lower prediction")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
+                Text("Importance shows how much each feature contributes to predictions")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 4)
             } else {
                 Text("Model not trained")
                     .font(.caption)
@@ -624,10 +619,10 @@ private struct ScatterPointDetailView: View {
         VStack(spacing: 16) {
             if index < results.dates.count {
                 let date = results.dates[index]
-                let formatter = DateFormatter()
-                let _ = formatter.dateStyle = .long
+                let dateFormatter = DateFormatter()
+                let _ = dateFormatter.dateStyle = .long
 
-                Text(formatter.string(from: date))
+                Text(dateFormatter.string(from: date))
                     .font(.headline)
             }
 
