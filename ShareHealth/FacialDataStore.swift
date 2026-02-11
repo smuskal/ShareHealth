@@ -94,7 +94,13 @@ class FacialDataStore: ObservableObject {
 
     /// Load all stored captures
     func loadCaptures(completion: (() -> Void)? = nil) {
-        isLoading = true
+        if Thread.isMainThread {
+            isLoading = true
+        } else {
+            DispatchQueue.main.async {
+                self.isLoading = true
+            }
+        }
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else {
