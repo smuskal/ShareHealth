@@ -6,6 +6,7 @@ import Photos
 
 /// Main view for Face-to-Health prediction feature
 struct FaceToHealthView: View {
+    @AppStorage("hasSeenFaceToHealthMedicalDisclaimer") private var hasSeenFaceToHealthMedicalDisclaimer = false
     @StateObject private var viewModel = FaceToHealthViewModel()
     @StateObject private var importer = FaceDataImporter()
     @ObservedObject private var dataStore = FacialDataStore.shared
@@ -43,6 +44,9 @@ struct FaceToHealthView: View {
 
     // Model type selection
     @State private var selectedModelType: ModelType = FaceHealthModelTrainer.currentModelType
+    @State private var showingMedicalDisclaimer = false
+    @State private var showingMedicalSources = false
+    @State private var showingInitialMedicalDisclaimer = false
 
     var body: some View {
         NavigationStack {
@@ -50,6 +54,7 @@ struct FaceToHealthView: View {
                 VStack(spacing: 20) {
                     headerSection
                     captureSection
+                    medicalInfoSection
 
                     if importer.isImporting {
                         importProgressSection
@@ -122,6 +127,9 @@ struct FaceToHealthView: View {
                 }
             }
             .onAppear {
+                if !hasSeenFaceToHealthMedicalDisclaimer {
+                    showingInitialMedicalDisclaimer = true
+                }
                 viewModel.checkAvailableTargets()
                 dataStore.loadCaptures()
                 viewModel.updateAllPredictions()
@@ -198,6 +206,21 @@ struct FaceToHealthView: View {
                     snapshotResultMessage = message
                     showingSnapshotResult = true
                 }
+            }
+            .sheet(isPresented: $showingMedicalDisclaimer) {
+                MedicalDisclaimerSheetView()
+            }
+            .sheet(isPresented: $showingMedicalSources) {
+                MedicalSourcesSheetView()
+            }
+            .sheet(isPresented: $showingInitialMedicalDisclaimer) {
+                MedicalDisclaimerSheetView(
+                    title: "Before You Continue",
+                    doneButtonTitle: "I Understand",
+                    onDone: {
+                        hasSeenFaceToHealthMedicalDisclaimer = true
+                    }
+                )
             }
             .fullScreenCover(isPresented: $showingExpandedImage) {
                 ExpandedImageView(image: expandedImage) {
@@ -540,6 +563,15 @@ struct FaceToHealthView: View {
         }
     }
 
+    // MARK: - Medical Info
+
+    private var medicalInfoSection: some View {
+        MedicalInfoInlineLinks(
+            onDisclaimerTap: { showingMedicalDisclaimer = true },
+            onSourcesTap: { showingMedicalSources = true }
+        )
+    }
+
     // MARK: - Model Targets Section
 
     private var modelTargetsSection: some View {
@@ -873,6 +905,12 @@ struct FaceToHealthView: View {
                         .foregroundColor(.secondary)
                 }
                 .padding(.top, 4)
+
+                MedicalInfoInlineLinks(
+                    onDisclaimerTap: { showingMedicalDisclaimer = true },
+                    onSourcesTap: { showingMedicalSources = true }
+                )
+                .padding(.top, 6)
             } else {
                 Text("Capture a face to see predictions")
                     .font(.subheadline)
@@ -1741,6 +1779,8 @@ struct PredictionCaptureView: View {
     @State private var livePredictions: [String: Double] = [:]
     @State private var selectedTargetsCopy: Set<String> = []
     @State private var isSaving = false
+    @State private var showingMedicalDisclaimer = false
+    @State private var showingMedicalSources = false
 
     var body: some View {
         NavigationStack {
@@ -1764,6 +1804,12 @@ struct PredictionCaptureView: View {
         }
         .onAppear {
             selectedTargetsCopy = viewModel.selectedTargets
+        }
+        .sheet(isPresented: $showingMedicalDisclaimer) {
+            MedicalDisclaimerSheetView()
+        }
+        .sheet(isPresented: $showingMedicalSources) {
+            MedicalSourcesSheetView()
         }
     }
 
@@ -1827,6 +1873,11 @@ struct PredictionCaptureView: View {
                 .padding()
                 .background(Color(.systemGray6))
                 .cornerRadius(12)
+
+                MedicalInfoInlineLinks(
+                    onDisclaimerTap: { showingMedicalDisclaimer = true },
+                    onSourcesTap: { showingMedicalSources = true }
+                )
 
                 // Facial metrics summary
                 if let metrics = capturedMetrics {
@@ -2219,6 +2270,124 @@ struct ExpandedImageView: View {
                     .font(.caption)
                     .foregroundColor(.white.opacity(0.7))
                     .padding()
+            }
+        }
+    }
+}
+
+private struct MedicalInfoInlineLinks: View {
+    let onDisclaimerTap: () -> Void
+    let onSourcesTap: () -> Void
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: "cross.case.fill")
+                .font(.caption2)
+                .foregroundColor(.secondary)
+
+            Text("Not medical advice.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Spacer(minLength: 4)
+
+            Button("Disclaimer", action: onDisclaimerTap)
+                .font(.caption)
+
+            Text("|")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            Button("Sources", action: onSourcesTap)
+                .font(.caption)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(Color(.systemGray6))
+        .cornerRadius(10)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Not medical advice. Open disclaimer or sources.")
+    }
+}
+
+private struct MedicalDisclaimerSheetView: View {
+    @Environment(\.dismiss) private var dismiss
+    let title: String
+    let doneButtonTitle: String
+    let onDone: (() -> Void)?
+
+    init(
+        title: String = "Medical Disclaimer",
+        doneButtonTitle: String = "Done",
+        onDone: (() -> Void)? = nil
+    ) {
+        self.title = title
+        self.doneButtonTitle = doneButtonTitle
+        self.onDone = onDone
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                Text("""
+Medical Disclaimer
+
+ShareHealth provides informational and educational content only. It does not provide medical advice, diagnosis, or treatment, and it is not a medical device.
+
+Do not use this app as a substitute for professional judgment. Always consult a licensed physician or other qualified healthcare provider before making medical decisions or changing medications, treatment plans, diet, or activity.
+
+If you think you may have a medical emergency, call 911 immediately.
+""")
+                    .font(.body)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding()
+            }
+            .navigationTitle(title)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(doneButtonTitle) {
+                        onDone?()
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct MedicalSourcesSheetView: View {
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section("How Predictions Are Generated") {
+                    Text("Predictions are generated on-device from your past face captures and Apple Health data.")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                    Text("Face analysis uses MediaPipe Face Landmarker and app-specific machine learning models.")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                    Link("MediaPipe Face Landmarker", destination: URL(string: "https://ai.google.dev/edge/mediapipe/solutions/vision/face_landmarker")!)
+                }
+
+                Section("Health Metric Context") {
+                    Link("Apple Health: Heart Rate Variability", destination: URL(string: "https://support.apple.com/en-us/HT204666")!)
+                    Link("Apple Health: Resting Heart Rate", destination: URL(string: "https://support.apple.com/guide/watch/track-your-heart-rate-apd897dccddf/watchos")!)
+                    Link("CDC: Sleep and Sleep Disorders", destination: URL(string: "https://www.cdc.gov/sleep/index.html")!)
+                    Link("American Heart Association: Heart Rate and Exercise", destination: URL(string: "https://www.heart.org/en/healthy-living/fitness/fitness-basics/target-heart-rates")!)
+                }
+            }
+            .listStyle(.insetGrouped)
+            .navigationTitle("Sources")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
             }
         }
     }

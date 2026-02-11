@@ -3,9 +3,11 @@ import HealthKit
 
 struct WelcomeView: View {
     let onAuthorized: () -> Void
+    @AppStorage("hasSeenGlobalMedicalDisclaimer") private var hasSeenGlobalMedicalDisclaimer = false
     @StateObject private var stepManager = StepManager()
     @StateObject private var healthExporter = HealthDataExporter()
     @State private var isRequesting = false
+    @State private var showingMedicalDisclaimer = false
 
     var body: some View {
         VStack(spacing: 20) {
@@ -62,6 +64,37 @@ struct WelcomeView: View {
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
+        .sheet(isPresented: $showingMedicalDisclaimer) {
+            NavigationStack {
+                ScrollView {
+                    Text("""
+Medical Disclaimer
+
+ShareHealth provides informational and educational content only. It does not provide medical advice, diagnosis, or treatment, and it is not a medical device.
+
+Do not use this app as a substitute for professional judgment. Always consult a licensed physician or other qualified healthcare provider before making medical decisions or changing medications, treatment plans, diet, or activity.
+
+If you think you may have a medical emergency, call 911 immediately.
+""")
+                        .font(.body)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding()
+                }
+                .navigationTitle("Before You Continue")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("I Understand") {
+                            hasSeenGlobalMedicalDisclaimer = true
+                            showingMedicalDisclaimer = false
+                            HealthKitManager.shared.setAuthorized(true)
+                            onAuthorized()
+                        }
+                    }
+                }
+            }
+            .interactiveDismissDisabled()
+        }
     }
 
     private func requestAccess() {
@@ -75,9 +108,13 @@ struct WelcomeView: View {
                     isRequesting = false
                     if success || stepSuccess {
                         print("✅ [WELCOME] HealthKit access granted")
-                        HealthKitManager.shared.setAuthorized(true)
                         UserDefaults.standard.set(true, forKey: "healthExportAuthorized")
-                        onAuthorized()
+                        if hasSeenGlobalMedicalDisclaimer {
+                            HealthKitManager.shared.setAuthorized(true)
+                            onAuthorized()
+                        } else {
+                            showingMedicalDisclaimer = true
+                        }
                     } else {
                         print("❌ [WELCOME] HealthKit access denied")
                     }
