@@ -34,7 +34,14 @@ class HealthKitManager: ObservableObject {
     }
 
     func setAuthorized(_ authorized: Bool) {
-        isAuthorized = authorized
-        UserDefaults.standard.set(authorized, forKey: "healthKitAuthorized")
+        if Thread.isMainThread {
+            isAuthorized = authorized
+            UserDefaults.standard.set(authorized, forKey: "healthKitAuthorized")
+        } else {
+            DispatchQueue.main.async {
+                self.isAuthorized = authorized
+                UserDefaults.standard.set(authorized, forKey: "healthKitAuthorized")
+            }
+        }
     }
 }

@@ -184,7 +184,6 @@ struct FaceHistoryView: View {
 
     private func importPhotosFromLibrary(items: [PhotosPickerItem]) {
         let analyzer = MediaPipeFaceAnalyzer()
-        let total = items.count
         var imported = 0
         var failed = 0
 

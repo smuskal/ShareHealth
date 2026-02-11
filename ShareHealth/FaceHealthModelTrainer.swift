@@ -303,7 +303,7 @@ class FaceHealthModelTrainer {
     func sampleCountForTarget(_ targetId: String, captures: [StoredFaceCapture]) -> Int {
         var count = 0
         for capture in captures {
-            guard let metrics = capture.metrics,
+            guard capture.metrics != nil,
                   let healthData = capture.healthData else { continue }
             if extractTargetValue(targetId: targetId, healthData: healthData) != nil {
                 count += 1
@@ -608,7 +608,7 @@ class FaceHealthModelTrainer {
         dateFormatter.dateFormat = "yyyy-MM-dd"
 
         for capture in captures {
-            guard let metrics = capture.metrics,
+            guard capture.metrics != nil,
                   let healthData = capture.healthData else { continue }
 
             guard extractTargetValue(targetId: targetId, healthData: healthData) != nil else { continue }
@@ -624,7 +624,7 @@ class FaceHealthModelTrainer {
     func getCaptureCount(for targetId: String, captures: [StoredFaceCapture]) -> Int {
         var count = 0
         for capture in captures {
-            guard let metrics = capture.metrics,
+            guard capture.metrics != nil,
                   let healthData = capture.healthData else { continue }
 
             guard extractTargetValue(targetId: targetId, healthData: healthData) != nil else { continue }

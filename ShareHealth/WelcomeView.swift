@@ -64,6 +64,11 @@ struct WelcomeView: View {
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(.systemBackground))
+        .onAppear {
+            if !hasSeenGlobalMedicalDisclaimer {
+                showingMedicalDisclaimer = true
+            }
+        }
         .sheet(isPresented: $showingMedicalDisclaimer) {
             NavigationStack {
                 ScrollView {
@@ -87,8 +92,6 @@ If you think you may have a medical emergency, call 911 immediately.
                         Button("I Understand") {
                             hasSeenGlobalMedicalDisclaimer = true
                             showingMedicalDisclaimer = false
-                            HealthKitManager.shared.setAuthorized(true)
-                            onAuthorized()
                         }
                     }
                 }
@@ -109,12 +112,8 @@ If you think you may have a medical emergency, call 911 immediately.
                     if success || stepSuccess {
                         print("✅ [WELCOME] HealthKit access granted")
                         UserDefaults.standard.set(true, forKey: "healthExportAuthorized")
-                        if hasSeenGlobalMedicalDisclaimer {
-                            HealthKitManager.shared.setAuthorized(true)
-                            onAuthorized()
-                        } else {
-                            showingMedicalDisclaimer = true
-                        }
+                        HealthKitManager.shared.setAuthorized(true)
+                        onAuthorized()
                     } else {
                         print("❌ [WELCOME] HealthKit access denied")
                     }

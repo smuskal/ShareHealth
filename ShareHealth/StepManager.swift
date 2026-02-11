@@ -107,7 +107,6 @@ class StepManager: ObservableObject {
     func modifySteps(for date: Date, steps: [String: Int], completion: @escaping (Bool, String?) -> Void) {
         let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount)!
         let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: date)
         
         print("\n[MODIFY] Adding steps for \(formatDebugDate(date))")
         

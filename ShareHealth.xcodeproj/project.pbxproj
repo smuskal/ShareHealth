@@ -22,22 +22,11 @@
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
-/* Begin PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
-		A829F2372CF4427600BB4946 /* Exceptions for "ShareHealth" folder in "Copy Bundle Resources" phase from "ShareHealth" target */ = {
-			isa = PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet;
-			buildPhase = A89E80DA2CF1278400236586 /* Resources */;
-			membershipExceptions = (
-				DateExtensions.swift,
-			);
-		};
-/* End PBXFileSystemSynchronizedGroupBuildPhaseMembershipExceptionSet section */
-
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		A89E80DE2CF1278400236586 /* ShareHealth */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				A8CEFA4D2CF1444200EC75B7 /* Exceptions for "ShareHealth" folder in "ShareHealth" target */,
-				A829F2372CF4427600BB4946 /* Exceptions for "ShareHealth" folder in "Copy Bundle Resources" phase from "ShareHealth" target */,
 			);
 			path = ShareHealth;
 			sourceTree = "<group>";
