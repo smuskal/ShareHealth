@@ -412,24 +412,46 @@ class HealthDataExporter: ObservableObject {
             self.errorMessage = nil
         }
 
+        fetchAllHealthData(for: date, reportProgress: true) { healthData in
+            guard let healthData = healthData else {
+                completion(nil, "Failed to fetch health data")
+                return
+            }
+
+            let csvURL = self.generateCSV(date: date, data: healthData)
+
+            DispatchQueue.main.async {
+                self.isExporting = false
+                self.exportProgress = 1.0
+                self.exportedFilePath = csvURL
+            }
+
+            completion(csvURL, csvURL == nil ? "Failed to generate CSV" : nil)
+        }
+    }
+
+    /// Fetch all health data for a single day — all queries fire concurrently with per-query timeouts
+    private func fetchAllHealthData(for date: Date, reportProgress: Bool, completion: @escaping ([String: String]?) -> Void) {
         let calendar = Calendar.current
         let startOfDay = calendar.startOfDay(for: date)
         guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
-            completion(nil, "Failed to calculate date range")
+            completion(nil)
             return
         }
 
         var healthData: [String: String] = [:]
         let group = DispatchGroup()
-        let totalMetrics = quantityMetrics.count + 6 // +6 for category types
+        let totalMetrics = quantityMetrics.count + 6
         var completedMetrics = 0
 
-        // Fetch all quantity metrics
+        // Fire all quantity metrics concurrently (each has its own 5s timeout)
         for metric in quantityMetrics {
             group.enter()
 
-            DispatchQueue.main.async {
-                self.currentMetric = metric.csvHeader
+            if reportProgress {
+                DispatchQueue.main.async {
+                    self.currentMetric = metric.csvHeader
+                }
             }
 
             fetchQuantityMetric(metric, startDate: startOfDay, endDate: endOfDay) { value in
@@ -438,104 +460,75 @@ class HealthDataExporter: ObservableObject {
                 }
 
                 completedMetrics += 1
-                DispatchQueue.main.async {
-                    self.exportProgress = Double(completedMetrics) / Double(totalMetrics)
+                if reportProgress {
+                    DispatchQueue.main.async {
+                        self.exportProgress = Double(completedMetrics) / Double(totalMetrics)
+                    }
                 }
 
                 group.leave()
             }
         }
 
-        // Fetch heart rate min/max separately
+        // Category queries — also concurrent with timeouts
         group.enter()
         fetchHeartRateMinMax(startDate: startOfDay, endDate: endOfDay) { minHR, maxHR in
-            if let minHR = minHR {
-                healthData["Heart Rate [Min] (count/min)"] = minHR
-            }
-            if let maxHR = maxHR {
-                healthData["Heart Rate [Max] (count/min)"] = maxHR
-            }
+            if let minHR = minHR { healthData["Heart Rate [Min] (count/min)"] = minHR }
+            if let maxHR = maxHR { healthData["Heart Rate [Max] (count/min)"] = maxHR }
             group.leave()
         }
 
-        // Fetch sleep analysis
         group.enter()
         fetchSleepAnalysis(startDate: startOfDay, endDate: endOfDay) { sleepData in
-            for (key, value) in sleepData {
-                healthData[key] = value
-            }
+            for (key, value) in sleepData { healthData[key] = value }
             completedMetrics += 1
-            DispatchQueue.main.async {
-                self.exportProgress = Double(completedMetrics) / Double(totalMetrics)
+            if reportProgress {
+                DispatchQueue.main.async {
+                    self.exportProgress = Double(completedMetrics) / Double(totalMetrics)
+                }
             }
             group.leave()
         }
 
-        // Fetch mindful minutes
         group.enter()
         fetchMindfulMinutes(startDate: startOfDay, endDate: endOfDay) { value in
-            if let value = value {
-                healthData["Mindful Minutes (min)"] = value
-            }
+            if let value = value { healthData["Mindful Minutes (min)"] = value }
             completedMetrics += 1
             group.leave()
         }
 
-        // Fetch handwashing
         group.enter()
         fetchHandwashing(startDate: startOfDay, endDate: endOfDay) { value in
-            if let value = value {
-                healthData["Handwashing (s)"] = value
-            }
+            if let value = value { healthData["Handwashing (s)"] = value }
             completedMetrics += 1
             group.leave()
         }
 
-        // Fetch toothbrushing
         group.enter()
         fetchToothbrushing(startDate: startOfDay, endDate: endOfDay) { value in
-            if let value = value {
-                healthData["Toothbrushing (s)"] = value
-            }
+            if let value = value { healthData["Toothbrushing (s)"] = value }
             completedMetrics += 1
             group.leave()
         }
 
-        // Fetch stand hours
         group.enter()
         fetchStandHours(startDate: startOfDay, endDate: endOfDay) { value in
-            if let value = value {
-                healthData["Apple Stand Hour (count)"] = value
-            }
+            if let value = value { healthData["Apple Stand Hour (count)"] = value }
             completedMetrics += 1
             group.leave()
         }
 
-        // Fetch sexual activity
         group.enter()
         fetchSexualActivity(startDate: startOfDay, endDate: endOfDay) { unspecified, protectionUsed, protectionNotUsed in
-            if let val = unspecified {
-                healthData["Sexual Activity [Unspecified] (count)"] = val
-            }
-            if let val = protectionUsed {
-                healthData["Sexual Activity [Protection Used] (count)"] = val
-            }
-            if let val = protectionNotUsed {
-                healthData["Sexual Activity [Protection Not Used] (count)"] = val
-            }
+            if let val = unspecified { healthData["Sexual Activity [Unspecified] (count)"] = val }
+            if let val = protectionUsed { healthData["Sexual Activity [Protection Used] (count)"] = val }
+            if let val = protectionNotUsed { healthData["Sexual Activity [Protection Not Used] (count)"] = val }
             completedMetrics += 1
             group.leave()
         }
 
         group.notify(queue: .main) {
-            // Generate CSV
-            let csvURL = self.generateCSV(date: date, data: healthData)
-
-            self.isExporting = false
-            self.exportProgress = 1.0
-            self.exportedFilePath = csvURL
-
-            completion(csvURL, csvURL == nil ? "Failed to generate CSV" : nil)
+            completion(healthData)
         }
     }
 
@@ -559,9 +552,24 @@ class HealthDataExporter: ObservableObject {
             options = .discreteMax
         }
 
+        // Track whether the completion has already been called (timeout vs query result race)
+        var hasCompleted = false
+        let completionLock = NSLock()
+
+        let safeComplete: (String?) -> Void = { value in
+            completionLock.lock()
+            guard !hasCompleted else {
+                completionLock.unlock()
+                return
+            }
+            hasCompleted = true
+            completionLock.unlock()
+            completion(value)
+        }
+
         let query = HKStatisticsQuery(quantityType: quantityType, quantitySamplePredicate: predicate, options: options) { _, result, _ in
             guard let result = result else {
-                completion(nil)
+                safeComplete(nil)
                 return
             }
 
@@ -582,13 +590,26 @@ class HealthDataExporter: ObservableObject {
                 if metric.unit == .percent() {
                     value = value * 100
                 }
-                completion(self.formatValue(value))
+                safeComplete(self.formatValue(value))
             } else {
-                completion(nil)
+                safeComplete(nil)
             }
         }
 
         healthStore.execute(query)
+
+        // Timeout: if HealthKit doesn't respond within 5 seconds, skip this metric and move on
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) { [weak self] in
+            completionLock.lock()
+            let alreadyDone = hasCompleted
+            completionLock.unlock()
+
+            if !alreadyDone {
+                print("⚠️ Timeout fetching \(metric.csvHeader), skipping")
+                self?.healthStore.stop(query)
+                safeComplete(nil)
+            }
+        }
     }
 
     private func fetchHeartRateMinMax(startDate: Date, endDate: Date, completion: @escaping (String?, String?) -> Void) {
@@ -600,17 +621,38 @@ class HealthDataExporter: ObservableObject {
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
         let unit = HKUnit.count().unitDivided(by: .minute())
 
+        var hasCompleted = false
+        let completionLock = NSLock()
+        let safeComplete: (String?, String?) -> Void = { v1, v2 in
+            completionLock.lock()
+            guard !hasCompleted else { completionLock.unlock(); return }
+            hasCompleted = true
+            completionLock.unlock()
+            completion(v1, v2)
+        }
+
         let query = HKStatisticsQuery(quantityType: heartRateType, quantitySamplePredicate: predicate, options: [.discreteMin, .discreteMax]) { _, result, _ in
             let minHR = result?.minimumQuantity()?.doubleValue(for: unit)
             let maxHR = result?.maximumQuantity()?.doubleValue(for: unit)
 
-            completion(
+            safeComplete(
                 minHR != nil ? self.formatValue(minHR!) : nil,
                 maxHR != nil ? self.formatValue(maxHR!) : nil
             )
         }
 
         healthStore.execute(query)
+
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) { [weak self] in
+            completionLock.lock()
+            let done = hasCompleted
+            completionLock.unlock()
+            if !done {
+                print("⚠️ Timeout fetching Heart Rate Min/Max, skipping")
+                self?.healthStore.stop(query)
+                safeComplete(nil, nil)
+            }
+        }
     }
 
     private func fetchSleepAnalysis(startDate: Date, endDate: Date, completion: @escaping ([String: String]) -> Void) {
@@ -627,11 +669,21 @@ class HealthDataExporter: ObservableObject {
         // Use no strict options to get any samples that overlap with our range
         let predicate = HKQuery.predicateForSamples(withStart: sleepQueryStart, end: endDate, options: [])
 
+        var hasCompleted = false
+        let completionLock = NSLock()
+        let safeComplete: ([String: String]) -> Void = { value in
+            completionLock.lock()
+            guard !hasCompleted else { completionLock.unlock(); return }
+            hasCompleted = true
+            completionLock.unlock()
+            completion(value)
+        }
+
         let query = HKSampleQuery(sampleType: sleepType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
             var sleepData: [String: String] = [:]
 
             guard let categorySamples = samples as? [HKCategorySample] else {
-                completion([:])
+                safeComplete([:])
                 return
             }
 
@@ -830,10 +882,21 @@ class HealthDataExporter: ObservableObject {
                 }
             }
 
-            completion(sleepData)
+            safeComplete(sleepData)
         }
 
         healthStore.execute(query)
+
+        DispatchQueue.global().asyncAfter(deadline: .now() + 10.0) { [weak self] in
+            completionLock.lock()
+            let done = hasCompleted
+            completionLock.unlock()
+            if !done {
+                print("⚠️ Timeout fetching Sleep Analysis, skipping")
+                self?.healthStore.stop(query)
+                safeComplete([:])
+            }
+        }
     }
 
     private func fetchMindfulMinutes(startDate: Date, endDate: Date, completion: @escaping (String?) -> Void) {
@@ -843,26 +906,25 @@ class HealthDataExporter: ObservableObject {
         }
 
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        var hasCompleted = false
+        let lock = NSLock()
+        let safeComplete: (String?) -> Void = { v in
+            lock.lock(); guard !hasCompleted else { lock.unlock(); return }; hasCompleted = true; lock.unlock()
+            completion(v)
+        }
 
         let query = HKSampleQuery(sampleType: mindfulType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
-            guard let categorySamples = samples as? [HKCategorySample] else {
-                completion(nil)
-                return
-            }
-
+            guard let categorySamples = samples as? [HKCategorySample] else { safeComplete(nil); return }
             var totalMinutes: TimeInterval = 0
-            for sample in categorySamples {
-                totalMinutes += sample.endDate.timeIntervalSince(sample.startDate)
-            }
-
-            if totalMinutes > 0 {
-                completion(self.formatValue(totalMinutes / 60.0))
-            } else {
-                completion(nil)
-            }
+            for sample in categorySamples { totalMinutes += sample.endDate.timeIntervalSince(sample.startDate) }
+            safeComplete(totalMinutes > 0 ? self.formatValue(totalMinutes / 60.0) : nil)
         }
 
         healthStore.execute(query)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) { [weak self] in
+            lock.lock(); let done = hasCompleted; lock.unlock()
+            if !done { print("⚠️ Timeout: Mindful Minutes"); self?.healthStore.stop(query); safeComplete(nil) }
+        }
     }
 
     private func fetchHandwashing(startDate: Date, endDate: Date, completion: @escaping (String?) -> Void) {
@@ -872,26 +934,25 @@ class HealthDataExporter: ObservableObject {
         }
 
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        var hasCompleted = false
+        let lock = NSLock()
+        let safeComplete: (String?) -> Void = { v in
+            lock.lock(); guard !hasCompleted else { lock.unlock(); return }; hasCompleted = true; lock.unlock()
+            completion(v)
+        }
 
         let query = HKSampleQuery(sampleType: handwashingType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
-            guard let categorySamples = samples as? [HKCategorySample] else {
-                completion(nil)
-                return
-            }
-
+            guard let categorySamples = samples as? [HKCategorySample] else { safeComplete(nil); return }
             var totalSeconds: TimeInterval = 0
-            for sample in categorySamples {
-                totalSeconds += sample.endDate.timeIntervalSince(sample.startDate)
-            }
-
-            if totalSeconds > 0 {
-                completion(self.formatValue(totalSeconds))
-            } else {
-                completion(nil)
-            }
+            for sample in categorySamples { totalSeconds += sample.endDate.timeIntervalSince(sample.startDate) }
+            safeComplete(totalSeconds > 0 ? self.formatValue(totalSeconds) : nil)
         }
 
         healthStore.execute(query)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) { [weak self] in
+            lock.lock(); let done = hasCompleted; lock.unlock()
+            if !done { print("⚠️ Timeout: Handwashing"); self?.healthStore.stop(query); safeComplete(nil) }
+        }
     }
 
     private func fetchToothbrushing(startDate: Date, endDate: Date, completion: @escaping (String?) -> Void) {
@@ -901,26 +962,25 @@ class HealthDataExporter: ObservableObject {
         }
 
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        var hasCompleted = false
+        let lock = NSLock()
+        let safeComplete: (String?) -> Void = { v in
+            lock.lock(); guard !hasCompleted else { lock.unlock(); return }; hasCompleted = true; lock.unlock()
+            completion(v)
+        }
 
         let query = HKSampleQuery(sampleType: toothbrushingType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
-            guard let categorySamples = samples as? [HKCategorySample] else {
-                completion(nil)
-                return
-            }
-
+            guard let categorySamples = samples as? [HKCategorySample] else { safeComplete(nil); return }
             var totalSeconds: TimeInterval = 0
-            for sample in categorySamples {
-                totalSeconds += sample.endDate.timeIntervalSince(sample.startDate)
-            }
-
-            if totalSeconds > 0 {
-                completion(self.formatValue(totalSeconds))
-            } else {
-                completion(nil)
-            }
+            for sample in categorySamples { totalSeconds += sample.endDate.timeIntervalSince(sample.startDate) }
+            safeComplete(totalSeconds > 0 ? self.formatValue(totalSeconds) : nil)
         }
 
         healthStore.execute(query)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) { [weak self] in
+            lock.lock(); let done = hasCompleted; lock.unlock()
+            if !done { print("⚠️ Timeout: Toothbrushing"); self?.healthStore.stop(query); safeComplete(nil) }
+        }
     }
 
     private func fetchStandHours(startDate: Date, endDate: Date, completion: @escaping (String?) -> Void) {
@@ -930,28 +990,27 @@ class HealthDataExporter: ObservableObject {
         }
 
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        var hasCompleted = false
+        let lock = NSLock()
+        let safeComplete: (String?) -> Void = { v in
+            lock.lock(); guard !hasCompleted else { lock.unlock(); return }; hasCompleted = true; lock.unlock()
+            completion(v)
+        }
 
         let query = HKSampleQuery(sampleType: standHourType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
-            guard let categorySamples = samples as? [HKCategorySample] else {
-                completion(nil)
-                return
-            }
-
+            guard let categorySamples = samples as? [HKCategorySample] else { safeComplete(nil); return }
             var standCount = 0
             for sample in categorySamples {
-                if sample.value == HKCategoryValueAppleStandHour.stood.rawValue {
-                    standCount += 1
-                }
+                if sample.value == HKCategoryValueAppleStandHour.stood.rawValue { standCount += 1 }
             }
-
-            if standCount > 0 {
-                completion("\(standCount)")
-            } else {
-                completion(nil)
-            }
+            safeComplete(standCount > 0 ? "\(standCount)" : nil)
         }
 
         healthStore.execute(query)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) { [weak self] in
+            lock.lock(); let done = hasCompleted; lock.unlock()
+            if !done { print("⚠️ Timeout: Stand Hours"); self?.healthStore.stop(query); safeComplete(nil) }
+        }
     }
 
     private func fetchSexualActivity(startDate: Date, endDate: Date, completion: @escaping (String?, String?, String?) -> Void) {
@@ -961,30 +1020,22 @@ class HealthDataExporter: ObservableObject {
         }
 
         let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        var hasCompleted = false
+        let lock = NSLock()
+        let safeComplete: (String?, String?, String?) -> Void = { v1, v2, v3 in
+            lock.lock(); guard !hasCompleted else { lock.unlock(); return }; hasCompleted = true; lock.unlock()
+            completion(v1, v2, v3)
+        }
 
         let query = HKSampleQuery(sampleType: sexualActivityType, predicate: predicate, limit: HKObjectQueryNoLimit, sortDescriptors: nil) { _, samples, _ in
-            guard let categorySamples = samples as? [HKCategorySample] else {
-                completion(nil, nil, nil)
-                return
-            }
-
-            var unspecified = 0
-            var protectionUsed = 0
-            var protectionNotUsed = 0
-
+            guard let categorySamples = samples as? [HKCategorySample] else { safeComplete(nil, nil, nil); return }
+            var unspecified = 0, protectionUsed = 0, protectionNotUsed = 0
             for sample in categorySamples {
-                if let protectionUsedValue = sample.metadata?[HKMetadataKeySexualActivityProtectionUsed] as? Bool {
-                    if protectionUsedValue {
-                        protectionUsed += 1
-                    } else {
-                        protectionNotUsed += 1
-                    }
-                } else {
-                    unspecified += 1
-                }
+                if let used = sample.metadata?[HKMetadataKeySexualActivityProtectionUsed] as? Bool {
+                    if used { protectionUsed += 1 } else { protectionNotUsed += 1 }
+                } else { unspecified += 1 }
             }
-
-            completion(
+            safeComplete(
                 unspecified > 0 ? "\(unspecified)" : nil,
                 protectionUsed > 0 ? "\(protectionUsed)" : nil,
                 protectionNotUsed > 0 ? "\(protectionNotUsed)" : nil
@@ -992,6 +1043,10 @@ class HealthDataExporter: ObservableObject {
         }
 
         healthStore.execute(query)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) { [weak self] in
+            lock.lock(); let done = hasCompleted; lock.unlock()
+            if !done { print("⚠️ Timeout: Sexual Activity"); self?.healthStore.stop(query); safeComplete(nil, nil, nil) }
+        }
     }
 
     private func formatValue(_ value: Double) -> String {
@@ -1004,105 +1059,10 @@ class HealthDataExporter: ObservableObject {
 
     /// Export health data for a date and return raw data dictionary (for batch exports)
     func exportHealthDataRaw(for date: Date, completion: @escaping ([String: String]?) -> Void) {
-        let calendar = Calendar.current
-        let startOfDay = calendar.startOfDay(for: date)
-        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
-            completion(nil)
-            return
-        }
-
-        var healthData: [String: String] = [:]
-        let group = DispatchGroup()
-
-        // Fetch all quantity metrics
-        for metric in quantityMetrics {
-            group.enter()
-            fetchQuantityMetric(metric, startDate: startOfDay, endDate: endOfDay) { value in
-                if let value = value {
-                    healthData[metric.csvHeader] = value
-                }
-                group.leave()
-            }
-        }
-
-        // Fetch heart rate min/max
-        group.enter()
-        fetchHeartRateMinMax(startDate: startOfDay, endDate: endOfDay) { minHR, maxHR in
-            if let minHR = minHR {
-                healthData["Heart Rate [Min] (count/min)"] = minHR
-            }
-            if let maxHR = maxHR {
-                healthData["Heart Rate [Max] (count/min)"] = maxHR
-            }
-            group.leave()
-        }
-
-        // Fetch sleep analysis
-        group.enter()
-        fetchSleepAnalysis(startDate: startOfDay, endDate: endOfDay) { sleepData in
-            for (key, value) in sleepData {
-                healthData[key] = value
-            }
-            group.leave()
-        }
-
-        // Fetch mindful minutes
-        group.enter()
-        fetchMindfulMinutes(startDate: startOfDay, endDate: endOfDay) { value in
-            if let value = value {
-                healthData["Mindful Minutes (min)"] = value
-            }
-            group.leave()
-        }
-
-        // Fetch handwashing
-        group.enter()
-        fetchHandwashing(startDate: startOfDay, endDate: endOfDay) { value in
-            if let value = value {
-                healthData["Handwashing (s)"] = value
-            }
-            group.leave()
-        }
-
-        // Fetch toothbrushing
-        group.enter()
-        fetchToothbrushing(startDate: startOfDay, endDate: endOfDay) { value in
-            if let value = value {
-                healthData["Toothbrushing (s)"] = value
-            }
-            group.leave()
-        }
-
-        // Fetch stand hours
-        group.enter()
-        fetchStandHours(startDate: startOfDay, endDate: endOfDay) { value in
-            if let value = value {
-                healthData["Apple Stand Hour (count)"] = value
-            }
-            group.leave()
-        }
-
-        // Fetch sexual activity
-        group.enter()
-        fetchSexualActivity(startDate: startOfDay, endDate: endOfDay) { unspecified, protectionUsed, protectionNotUsed in
-            if let val = unspecified {
-                healthData["Sexual Activity [Unspecified] (count)"] = val
-            }
-            if let val = protectionUsed {
-                healthData["Sexual Activity [Protection Used] (count)"] = val
-            }
-            if let val = protectionNotUsed {
-                healthData["Sexual Activity [Protection Not Used] (count)"] = val
-            }
-            group.leave()
-        }
-
-        group.notify(queue: .main) {
-            completion(healthData)
-        }
+        fetchAllHealthData(for: date, reportProgress: false, completion: completion)
     }
 
-    private func generateCSV(date: Date, data: [String: String]) -> URL? {
+    func generateCSV(date: Date, data: [String: String]) -> URL? {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
         let dateString = dateFormatter.string(from: date)

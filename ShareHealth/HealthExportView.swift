@@ -68,7 +68,7 @@ struct HealthExportView: View {
         .alert("Export Successful", isPresented: $showingSuccess) {
             Button("OK", role: .cancel) { }
         } message: {
-            Text("Your health data has been exported successfully.")
+            Text("Your health data has been exported successfully. The previous 6 days were also updated in the background.")
         }
         .alert("Export Error", isPresented: $showingError) {
             Button("OK", role: .cancel) { }
@@ -470,6 +470,7 @@ struct HealthExportView: View {
     private func quickExport() {
         guard let folderURL = defaultFolderURL else { return }
 
+        // Export selected date first (this is the "primary" export that may include face capture)
         exporter.exportHealthData(for: selectedDate) { tempURL, error in
             DispatchQueue.main.async {
                 if let error = error {
@@ -495,7 +496,55 @@ struct HealthExportView: View {
                 } else {
                     self.copyToDefaultFolder(from: tempURL, to: folderURL)
                 }
+
+                // Export trailing 6 days in the background (selected date already handled above)
+                self.exportTrailingDays(to: folderURL, excludingDate: self.selectedDate)
             }
+        }
+    }
+
+    /// Export the 6 days prior to the selected date in the background to catch updated data
+    private func exportTrailingDays(to folderURL: URL, excludingDate: Date) {
+        let calendar = Calendar.current
+        let excludedDay = calendar.startOfDay(for: excludingDate)
+
+        for daysBack in 1...6 {
+            guard let date = calendar.date(byAdding: .day, value: -daysBack, to: excludedDay) else { continue }
+
+            exporter.exportHealthDataRaw(for: date) { healthData in
+                guard let healthData = healthData else { return }
+
+                let csvURL = self.exporter.generateCSV(date: date, data: healthData)
+                guard let csvURL = csvURL else { return }
+
+                self.copyToDefaultFolderSilently(from: csvURL, to: folderURL, for: date)
+            }
+        }
+    }
+
+    /// Copy a CSV to the default folder without showing success/error alerts (for background trailing-day exports)
+    private func copyToDefaultFolderSilently(from sourceURL: URL, to folderURL: URL, for date: Date) {
+        guard folderURL.startAccessingSecurityScopedResource() else { return }
+        defer { folderURL.stopAccessingSecurityScopedResource() }
+
+        do {
+            let yearMonthPath = formatYearMonth(date)
+            let subfolderURL = folderURL.appendingPathComponent(yearMonthPath, isDirectory: true)
+
+            if !FileManager.default.fileExists(atPath: subfolderURL.path) {
+                try FileManager.default.createDirectory(at: subfolderURL, withIntermediateDirectories: true)
+            }
+
+            let fileName = sourceURL.lastPathComponent
+            let destinationURL = subfolderURL.appendingPathComponent(fileName)
+
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                try FileManager.default.removeItem(at: destinationURL)
+            }
+            try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
+            print("Trailing export saved: \(destinationURL.path)")
+        } catch {
+            print("Trailing export failed for \(date): \(error.localizedDescription)")
         }
     }
 
