@@ -440,6 +440,7 @@ class HealthDataExporter: ObservableObject {
         }
 
         var healthData: [String: String] = [:]
+        let dataLock = NSLock()
         let group = DispatchGroup()
         let totalMetrics = quantityMetrics.count + 6
         var completedMetrics = 0
@@ -455,14 +456,17 @@ class HealthDataExporter: ObservableObject {
             }
 
             fetchQuantityMetric(metric, startDate: startOfDay, endDate: endOfDay) { value in
+                dataLock.lock()
                 if let value = value {
                     healthData[metric.csvHeader] = value
                 }
-
                 completedMetrics += 1
+                let progress = Double(completedMetrics) / Double(totalMetrics)
+                dataLock.unlock()
+
                 if reportProgress {
                     DispatchQueue.main.async {
-                        self.exportProgress = Double(completedMetrics) / Double(totalMetrics)
+                        self.exportProgress = progress
                     }
                 }
 
@@ -473,18 +477,23 @@ class HealthDataExporter: ObservableObject {
         // Category queries — also concurrent with timeouts
         group.enter()
         fetchHeartRateMinMax(startDate: startOfDay, endDate: endOfDay) { minHR, maxHR in
+            dataLock.lock()
             if let minHR = minHR { healthData["Heart Rate [Min] (count/min)"] = minHR }
             if let maxHR = maxHR { healthData["Heart Rate [Max] (count/min)"] = maxHR }
+            dataLock.unlock()
             group.leave()
         }
 
         group.enter()
         fetchSleepAnalysis(startDate: startOfDay, endDate: endOfDay) { sleepData in
+            dataLock.lock()
             for (key, value) in sleepData { healthData[key] = value }
             completedMetrics += 1
+            let progress = Double(completedMetrics) / Double(totalMetrics)
+            dataLock.unlock()
             if reportProgress {
                 DispatchQueue.main.async {
-                    self.exportProgress = Double(completedMetrics) / Double(totalMetrics)
+                    self.exportProgress = progress
                 }
             }
             group.leave()
@@ -492,38 +501,48 @@ class HealthDataExporter: ObservableObject {
 
         group.enter()
         fetchMindfulMinutes(startDate: startOfDay, endDate: endOfDay) { value in
+            dataLock.lock()
             if let value = value { healthData["Mindful Minutes (min)"] = value }
             completedMetrics += 1
+            dataLock.unlock()
             group.leave()
         }
 
         group.enter()
         fetchHandwashing(startDate: startOfDay, endDate: endOfDay) { value in
+            dataLock.lock()
             if let value = value { healthData["Handwashing (s)"] = value }
             completedMetrics += 1
+            dataLock.unlock()
             group.leave()
         }
 
         group.enter()
         fetchToothbrushing(startDate: startOfDay, endDate: endOfDay) { value in
+            dataLock.lock()
             if let value = value { healthData["Toothbrushing (s)"] = value }
             completedMetrics += 1
+            dataLock.unlock()
             group.leave()
         }
 
         group.enter()
         fetchStandHours(startDate: startOfDay, endDate: endOfDay) { value in
+            dataLock.lock()
             if let value = value { healthData["Apple Stand Hour (count)"] = value }
             completedMetrics += 1
+            dataLock.unlock()
             group.leave()
         }
 
         group.enter()
         fetchSexualActivity(startDate: startOfDay, endDate: endOfDay) { unspecified, protectionUsed, protectionNotUsed in
+            dataLock.lock()
             if let val = unspecified { healthData["Sexual Activity [Unspecified] (count)"] = val }
             if let val = protectionUsed { healthData["Sexual Activity [Protection Used] (count)"] = val }
             if let val = protectionNotUsed { healthData["Sexual Activity [Protection Not Used] (count)"] = val }
             completedMetrics += 1
+            dataLock.unlock()
             group.leave()
         }
 

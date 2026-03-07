@@ -503,22 +503,36 @@ struct HealthExportView: View {
         }
     }
 
-    /// Export the 6 days prior to the selected date in the background to catch updated data
+    /// Export the 6 days prior to the selected date in the background, one at a time
     private func exportTrailingDays(to folderURL: URL, excludingDate: Date) {
         let calendar = Calendar.current
         let excludedDay = calendar.startOfDay(for: excludingDate)
 
+        // Build the list of dates to export
+        var datesToExport: [Date] = []
         for daysBack in 1...6 {
-            guard let date = calendar.date(byAdding: .day, value: -daysBack, to: excludedDay) else { continue }
-
-            exporter.exportHealthDataRaw(for: date) { healthData in
-                guard let healthData = healthData else { return }
-
-                let csvURL = self.exporter.generateCSV(date: date, data: healthData)
-                guard let csvURL = csvURL else { return }
-
-                self.copyToDefaultFolderSilently(from: csvURL, to: folderURL, for: date)
+            if let date = calendar.date(byAdding: .day, value: -daysBack, to: excludedDay) {
+                datesToExport.append(date)
             }
+        }
+
+        // Export sequentially on a background queue to avoid overwhelming HealthKit
+        DispatchQueue.global(qos: .utility).async {
+            let semaphore = DispatchSemaphore(value: 0)
+
+            for date in datesToExport {
+                self.exporter.exportHealthDataRaw(for: date) { healthData in
+                    defer { semaphore.signal() }
+                    guard let healthData = healthData else { return }
+
+                    let csvURL = self.exporter.generateCSV(date: date, data: healthData)
+                    guard let csvURL = csvURL else { return }
+
+                    self.copyToDefaultFolderSilently(from: csvURL, to: folderURL, for: date)
+                }
+                semaphore.wait()
+            }
+            print("Trailing 6-day export complete")
         }
     }
 
