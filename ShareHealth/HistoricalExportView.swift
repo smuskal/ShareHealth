@@ -4,10 +4,11 @@ import UIKit
 
 struct HistoricalExportView: View {
     @StateObject private var exporter = HealthDataExporter()
+    @ObservedObject private var healthKitManager = HealthKitManager.shared
     @State private var startDate = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
     @State private var endDate = Date()
     @State private var earliestAvailableDate: Date? = nil
-    @State private var isAuthorized = UserDefaults.standard.bool(forKey: "healthExportAuthorized")
+    @State private var isAuthorized = HealthKitManager.shared.isAuthorized
     @State private var isRequestingAuth = false
     @State private var showingError = false
     @State private var errorMessage = ""
@@ -418,17 +419,20 @@ struct HistoricalExportView: View {
     }
 
     private func checkAuthorization() {
-        isAuthorized = UserDefaults.standard.bool(forKey: "healthExportAuthorized")
+        healthKitManager.refreshAuthorizationState { authorized in
+            isAuthorized = authorized
+        }
     }
 
     private func requestAuthorization() {
         isRequestingAuth = true
         exporter.requestFullAuthorization { _ in
-            DispatchQueue.main.async {
-                isRequestingAuth = false
-                UserDefaults.standard.set(true, forKey: "healthExportAuthorized")
-                isAuthorized = true
-                findEarliestDate()
+            healthKitManager.refreshAuthorizationState { authorized in
+                DispatchQueue.main.async {
+                    isRequestingAuth = false
+                    isAuthorized = authorized
+                    findEarliestDate()
+                }
             }
         }
     }

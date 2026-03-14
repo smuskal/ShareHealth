@@ -4,7 +4,6 @@ import HealthKit
 struct WelcomeView: View {
     let onAuthorized: () -> Void
     @AppStorage("hasSeenGlobalMedicalDisclaimer") private var hasSeenGlobalMedicalDisclaimer = false
-    @StateObject private var stepManager = StepManager()
     @StateObject private var healthExporter = HealthDataExporter()
     @State private var isRequesting = false
     @State private var showingMedicalDisclaimer = false
@@ -103,19 +102,15 @@ If you think you may have a medical emergency, call 911 immediately.
     private func requestAccess() {
         isRequesting = true
 
-        // Request full health data authorization for export functionality
         healthExporter.requestFullAuthorization { success in
-            // Also request step write permission for sharing functionality
-            stepManager.requestAuthorization { stepSuccess in
+            HealthKitManager.shared.refreshAuthorizationState { authorized in
                 DispatchQueue.main.async {
                     isRequesting = false
-                    if success || stepSuccess {
+                    if success && authorized {
                         print("✅ [WELCOME] HealthKit access granted")
-                        UserDefaults.standard.set(true, forKey: "healthExportAuthorized")
-                        HealthKitManager.shared.setAuthorized(true)
                         onAuthorized()
                     } else {
-                        print("❌ [WELCOME] HealthKit access denied")
+                        print("❌ [WELCOME] HealthKit access denied or incomplete")
                     }
                 }
             }

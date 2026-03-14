@@ -14,6 +14,7 @@ class FaceDataImporter: ObservableObject {
 
     private let fileManager = FileManager.default
     private let dataStore = FacialDataStore.shared
+    private var healthDataByDate: [String: [String: String]] = [:]
 
     // Track error reasons for debugging
     private var errorReasons: [String: Int] = [:]
@@ -40,6 +41,7 @@ class FaceDataImporter: ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async {
             // Reset error tracking
             self.errorReasons = [:]
+            self.healthDataByDate = [:]
 
             // Start accessing security-scoped resource
             guard url.startAccessingSecurityScopedResource() else {
@@ -54,6 +56,7 @@ class FaceDataImporter: ObservableObject {
             // Find all Face-*.jpg files recursively
             var faceImages: [URL] = []
             self.findFaceImages(in: url, results: &faceImages)
+            self.healthDataByDate = self.loadHealthDataByDate(from: url)
 
             let totalFiles = faceImages.count
             if totalFiles == 0 {
@@ -220,6 +223,11 @@ class FaceDataImporter: ObservableObject {
            let data = try? Data(contentsOf: healthURL),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
             healthData = json
+        } else {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateFormat = "yyyy-MM-dd"
+            let dateKey = dateFormatter.string(from: captureDate)
+            healthData = healthDataByDate[dateKey] ?? [:]
         }
 
         // Copy files directly to local storage (no re-encoding to preserve exact pixels)
@@ -313,5 +321,111 @@ class FaceDataImporter: ObservableObject {
         formatter.dateFormat = "yyyy/MM"
         let yearMonth = formatter.string(from: date)
         return facesDir.appendingPathComponent(yearMonth, isDirectory: true)
+    }
+
+    private func loadHealthDataByDate(from directory: URL) -> [String: [String: String]] {
+        var csvFiles: [URL] = []
+        findHealthCSVs(in: directory, results: &csvFiles)
+
+        var results: [String: [String: String]] = [:]
+        for csvURL in csvFiles {
+            guard let parsed = parseHealthCSV(at: csvURL) else { continue }
+            results[parsed.date] = parsed.data
+        }
+
+        if !results.isEmpty {
+            print("Loaded \(results.count) daily health CSVs for import")
+        }
+
+        return results
+    }
+
+    private func findHealthCSVs(in directory: URL, results: inout [URL]) {
+        guard let contents = try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        for item in contents {
+            var isDirectory: ObjCBool = false
+            fileManager.fileExists(atPath: item.path, isDirectory: &isDirectory)
+
+            if isDirectory.boolValue {
+                findHealthCSVs(in: item, results: &results)
+            } else if item.lastPathComponent.hasPrefix("HealthMetrics-") && item.pathExtension.lowercased() == "csv" {
+                results.append(item)
+            }
+        }
+    }
+
+    private func parseHealthCSV(at url: URL) -> (date: String, data: [String: String])? {
+        guard let content = try? String(contentsOf: url, encoding: .utf8) else {
+            return nil
+        }
+
+        let lines = content
+            .components(separatedBy: .newlines)
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+        guard lines.count >= 2 else {
+            return nil
+        }
+
+        let headers = parseCSVRow(lines[0])
+        let values = parseCSVRow(lines[1])
+        guard !headers.isEmpty, !values.isEmpty else {
+            return nil
+        }
+
+        var data: [String: String] = [:]
+        for index in 0..<min(headers.count, values.count) {
+            let header = headers[index].trimmingCharacters(in: .whitespacesAndNewlines)
+            let value = values[index].trimmingCharacters(in: .whitespacesAndNewlines)
+
+            guard !header.isEmpty, header != "Date/Time", !value.isEmpty else {
+                continue
+            }
+
+            data[header] = value
+        }
+
+        let dateString = url.deletingPathExtension().lastPathComponent.replacingOccurrences(of: "HealthMetrics-", with: "")
+        guard !dateString.isEmpty else {
+            return nil
+        }
+
+        return (dateString, data)
+    }
+
+    private func parseCSVRow(_ row: String) -> [String] {
+        var values: [String] = []
+        var current = ""
+        var inQuotes = false
+        let characters = Array(row)
+        var index = 0
+
+        while index < characters.count {
+            let character = characters[index]
+
+            if character == "\"" {
+                if inQuotes, index + 1 < characters.count, characters[index + 1] == "\"" {
+                    current.append("\"")
+                    index += 1
+                } else {
+                    inQuotes.toggle()
+                }
+            } else if character == "," && !inQuotes {
+                values.append(current)
+                current = ""
+            } else {
+                current.append(character)
+            }
+
+            index += 1
+        }
+
+        values.append(current)
+        return values
     }
 }

@@ -27,7 +27,7 @@ class HealthDataExporter: ObservableObject {
     @Published var errorMessage: String?
 
     // All quantity metrics matching the CSV format - only using valid identifiers
-    private let quantityMetrics: [HealthMetric] = [
+    private static let quantityMetrics: [HealthMetric] = [
         // Energy
         HealthMetric(identifier: .activeEnergyBurned, csvHeader: "Active Energy (kcal)", unit: .kilocalorie(), aggregation: .sum),
         HealthMetric(identifier: .basalEnergyBurned, csvHeader: "Resting Energy (kcal)", unit: .kilocalorie(), aggregation: .sum),
@@ -359,41 +359,8 @@ class HealthDataExporter: ObservableObject {
             return
         }
 
-        var typesToRead: Set<HKObjectType> = []
-
-        // Add all quantity types
-        for metric in quantityMetrics {
-            if let type = HKQuantityType.quantityType(forIdentifier: metric.identifier) {
-                typesToRead.insert(type)
-            }
-        }
-
-        // Add category types
-        if let sleepType = HKCategoryType.categoryType(forIdentifier: .sleepAnalysis) {
-            typesToRead.insert(sleepType)
-        }
-        if let mindfulType = HKCategoryType.categoryType(forIdentifier: .mindfulSession) {
-            typesToRead.insert(mindfulType)
-        }
-        if let handwashingType = HKCategoryType.categoryType(forIdentifier: .handwashingEvent) {
-            typesToRead.insert(handwashingType)
-        }
-        if let toothbrushingType = HKCategoryType.categoryType(forIdentifier: .toothbrushingEvent) {
-            typesToRead.insert(toothbrushingType)
-        }
-        if let sexualActivityType = HKCategoryType.categoryType(forIdentifier: .sexualActivity) {
-            typesToRead.insert(sexualActivityType)
-        }
-        if let standHourType = HKCategoryType.categoryType(forIdentifier: .appleStandHour) {
-            typesToRead.insert(standHourType)
-        }
-
-        // Request write permission for Steps (needed for SharedSteps import feature)
-        var typesToWrite: Set<HKSampleType> = []
-        if let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) {
-            typesToWrite.insert(stepType)
-        }
-
+        let typesToRead = Self.requiredReadTypes()
+        let typesToWrite = Self.requiredWriteTypes()
         healthStore.requestAuthorization(toShare: typesToWrite, read: typesToRead) { success, error in
             DispatchQueue.main.async {
                 if let error = error {
@@ -402,6 +369,43 @@ class HealthDataExporter: ObservableObject {
                 completion(success)
             }
         }
+    }
+
+    static func requiredReadTypes() -> Set<HKObjectType> {
+        var typesToRead: Set<HKObjectType> = []
+
+        for metric in quantityMetrics {
+            if let type = HKQuantityType.quantityType(forIdentifier: metric.identifier) {
+                typesToRead.insert(type)
+            }
+        }
+
+        let categoryIdentifiers: [HKCategoryTypeIdentifier] = [
+            .sleepAnalysis,
+            .mindfulSession,
+            .handwashingEvent,
+            .toothbrushingEvent,
+            .sexualActivity,
+            .appleStandHour
+        ]
+
+        for identifier in categoryIdentifiers {
+            if let type = HKCategoryType.categoryType(forIdentifier: identifier) {
+                typesToRead.insert(type)
+            }
+        }
+
+        return typesToRead
+    }
+
+    static func requiredWriteTypes() -> Set<HKSampleType> {
+        var typesToWrite: Set<HKSampleType> = []
+
+        if let stepType = HKQuantityType.quantityType(forIdentifier: .stepCount) {
+            typesToWrite.insert(stepType)
+        }
+
+        return typesToWrite
     }
 
     /// Export health data for the specified date to CSV
@@ -442,11 +446,11 @@ class HealthDataExporter: ObservableObject {
         var healthData: [String: String] = [:]
         let dataLock = NSLock()
         let group = DispatchGroup()
-        let totalMetrics = quantityMetrics.count + 6
+        let totalMetrics = Self.quantityMetrics.count + 6
         var completedMetrics = 0
 
         // Fire all quantity metrics concurrently (each has its own 5s timeout)
-        for metric in quantityMetrics {
+        for metric in Self.quantityMetrics {
             group.enter()
 
             if reportProgress {

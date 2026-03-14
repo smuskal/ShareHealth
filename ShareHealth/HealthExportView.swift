@@ -5,9 +5,10 @@ import AVFoundation
 
 struct HealthExportView: View {
     @StateObject private var exporter = HealthDataExporter()
+    @ObservedObject private var healthKitManager = HealthKitManager.shared
     @ObservedObject private var facialDataStore = FacialDataStore.shared
     @State private var selectedDate = Date()
-    @State private var isAuthorized = UserDefaults.standard.bool(forKey: "healthExportAuthorized")
+    @State private var isAuthorized = HealthKitManager.shared.isAuthorized
     @State private var isRequestingAuth = false
     @State private var showingError = false
     @State private var errorMessage = ""
@@ -409,16 +410,19 @@ struct HealthExportView: View {
     // MARK: - Functions
 
     private func checkAuthorization() {
-        isAuthorized = UserDefaults.standard.bool(forKey: "healthExportAuthorized")
+        healthKitManager.refreshAuthorizationState { authorized in
+            isAuthorized = authorized
+        }
     }
 
     private func requestAuthorization() {
         isRequestingAuth = true
         exporter.requestFullAuthorization { _ in
-            DispatchQueue.main.async {
-                isRequestingAuth = false
-                UserDefaults.standard.set(true, forKey: "healthExportAuthorized")
-                isAuthorized = true
+            healthKitManager.refreshAuthorizationState { authorized in
+                DispatchQueue.main.async {
+                    isRequestingAuth = false
+                    isAuthorized = authorized
+                }
             }
         }
     }
