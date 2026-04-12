@@ -573,7 +573,7 @@ struct HistoricalExportView: View {
 
             // Export this day's data with timeout protection
             do {
-                let dayData = try await withTimeout(seconds: 30) {
+                let dayData = try await withTimeout(seconds: 60) {
                     await self.exportSingleDay(date: currentDate)
                 }
 

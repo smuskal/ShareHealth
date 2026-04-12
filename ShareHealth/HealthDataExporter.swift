@@ -449,33 +449,41 @@ class HealthDataExporter: ObservableObject {
         let totalMetrics = Self.quantityMetrics.count + 6
         var completedMetrics = 0
 
-        // Fire all quantity metrics concurrently (each has its own 5s timeout)
-        for metric in Self.quantityMetrics {
-            group.enter()
+        // Fire quantity metrics with concurrency throttling to avoid overwhelming HealthKit
+        group.enter() // Guard to prevent premature group completion
+        DispatchQueue.global(qos: .userInitiated).async {
+            let concurrencyLimit = DispatchSemaphore(value: 15)
 
-            if reportProgress {
-                DispatchQueue.main.async {
-                    self.currentMetric = metric.csvHeader
-                }
-            }
-
-            fetchQuantityMetric(metric, startDate: startOfDay, endDate: endOfDay) { value in
-                dataLock.lock()
-                if let value = value {
-                    healthData[metric.csvHeader] = value
-                }
-                completedMetrics += 1
-                let progress = Double(completedMetrics) / Double(totalMetrics)
-                dataLock.unlock()
+            for metric in Self.quantityMetrics {
+                group.enter()
+                concurrencyLimit.wait()
 
                 if reportProgress {
                     DispatchQueue.main.async {
-                        self.exportProgress = progress
+                        self.currentMetric = metric.csvHeader
                     }
                 }
 
-                group.leave()
+                self.fetchQuantityMetric(metric, startDate: startOfDay, endDate: endOfDay) { value in
+                    dataLock.lock()
+                    if let value = value {
+                        healthData[metric.csvHeader] = value
+                    }
+                    completedMetrics += 1
+                    let progress = Double(completedMetrics) / Double(totalMetrics)
+                    dataLock.unlock()
+
+                    if reportProgress {
+                        DispatchQueue.main.async {
+                            self.exportProgress = progress
+                        }
+                    }
+
+                    concurrencyLimit.signal()
+                    group.leave()
+                }
             }
+            group.leave() // Release guard
         }
 
         // Category queries — also concurrent with timeouts
@@ -621,8 +629,8 @@ class HealthDataExporter: ObservableObject {
 
         healthStore.execute(query)
 
-        // Timeout: if HealthKit doesn't respond within 5 seconds, skip this metric and move on
-        DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) { [weak self] in
+        // Timeout: if HealthKit doesn't respond within 15 seconds, skip this metric and move on
+        DispatchQueue.global().asyncAfter(deadline: .now() + 15.0) { [weak self] in
             completionLock.lock()
             let alreadyDone = hasCompleted
             completionLock.unlock()
@@ -666,7 +674,7 @@ class HealthDataExporter: ObservableObject {
 
         healthStore.execute(query)
 
-        DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) { [weak self] in
+        DispatchQueue.global().asyncAfter(deadline: .now() + 15.0) { [weak self] in
             completionLock.lock()
             let done = hasCompleted
             completionLock.unlock()
@@ -845,8 +853,7 @@ class HealthDataExporter: ObservableObject {
                 lastTime = event.time
             }
 
-            // Extract durations by category
-            let inBedTime = categoryDurations[HKCategoryValueSleepAnalysis.inBed.rawValue] ?? 0
+            // Extract durations by category from sweep line
             let coreTime = categoryDurations[HKCategoryValueSleepAnalysis.asleepCore.rawValue] ?? 0
             let deepTime = categoryDurations[HKCategoryValueSleepAnalysis.asleepDeep.rawValue] ?? 0
             let remTime = categoryDurations[HKCategoryValueSleepAnalysis.asleepREM.rawValue] ?? 0
@@ -854,9 +861,18 @@ class HealthDataExporter: ObservableObject {
             let unspecifiedTime = categoryDurations[HKCategoryValueSleepAnalysis.asleepUnspecified.rawValue] ?? 0
 
             let asleepTime = coreTime + deepTime + remTime + unspecifiedTime
-            let totalSleep = asleepTime + inBedTime
 
-            if totalSleep > 0 { sleepData["Sleep Analysis [Total] (hr)"] = self.formatValue(totalSleep / 3600.0) }
+            // In Bed = total session span (earliest bedtime to latest wake),
+            // NOT the sweep-line residual which is near-zero due to overlap priority
+            let inBedTime: TimeInterval
+            if let sessionStart = taggedIntervals.map({ $0.start }).min(),
+               let sessionEnd = taggedIntervals.map({ $0.end }).max() {
+                inBedTime = sessionEnd.timeIntervalSince(sessionStart)
+            } else {
+                inBedTime = 0
+            }
+
+            if asleepTime > 0 { sleepData["Sleep Analysis [Total] (hr)"] = self.formatValue(asleepTime / 3600.0) }
             if asleepTime > 0 { sleepData["Sleep Analysis [Asleep] (hr)"] = self.formatValue(asleepTime / 3600.0) }
             if inBedTime > 0 { sleepData["Sleep Analysis [In Bed] (hr)"] = self.formatValue(inBedTime / 3600.0) }
             if coreTime > 0 { sleepData["Sleep Analysis [Core] (hr)"] = self.formatValue(coreTime / 3600.0) }
@@ -910,7 +926,7 @@ class HealthDataExporter: ObservableObject {
 
         healthStore.execute(query)
 
-        DispatchQueue.global().asyncAfter(deadline: .now() + 10.0) { [weak self] in
+        DispatchQueue.global().asyncAfter(deadline: .now() + 20.0) { [weak self] in
             completionLock.lock()
             let done = hasCompleted
             completionLock.unlock()
@@ -944,7 +960,7 @@ class HealthDataExporter: ObservableObject {
         }
 
         healthStore.execute(query)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) { [weak self] in
+        DispatchQueue.global().asyncAfter(deadline: .now() + 15.0) { [weak self] in
             lock.lock(); let done = hasCompleted; lock.unlock()
             if !done { print("⚠️ Timeout: Mindful Minutes"); self?.healthStore.stop(query); safeComplete(nil) }
         }
@@ -972,7 +988,7 @@ class HealthDataExporter: ObservableObject {
         }
 
         healthStore.execute(query)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) { [weak self] in
+        DispatchQueue.global().asyncAfter(deadline: .now() + 15.0) { [weak self] in
             lock.lock(); let done = hasCompleted; lock.unlock()
             if !done { print("⚠️ Timeout: Handwashing"); self?.healthStore.stop(query); safeComplete(nil) }
         }
@@ -1000,7 +1016,7 @@ class HealthDataExporter: ObservableObject {
         }
 
         healthStore.execute(query)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) { [weak self] in
+        DispatchQueue.global().asyncAfter(deadline: .now() + 15.0) { [weak self] in
             lock.lock(); let done = hasCompleted; lock.unlock()
             if !done { print("⚠️ Timeout: Toothbrushing"); self?.healthStore.stop(query); safeComplete(nil) }
         }
@@ -1030,7 +1046,7 @@ class HealthDataExporter: ObservableObject {
         }
 
         healthStore.execute(query)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) { [weak self] in
+        DispatchQueue.global().asyncAfter(deadline: .now() + 15.0) { [weak self] in
             lock.lock(); let done = hasCompleted; lock.unlock()
             if !done { print("⚠️ Timeout: Stand Hours"); self?.healthStore.stop(query); safeComplete(nil) }
         }
@@ -1066,7 +1082,7 @@ class HealthDataExporter: ObservableObject {
         }
 
         healthStore.execute(query)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) { [weak self] in
+        DispatchQueue.global().asyncAfter(deadline: .now() + 15.0) { [weak self] in
             lock.lock(); let done = hasCompleted; lock.unlock()
             if !done { print("⚠️ Timeout: Sexual Activity"); self?.healthStore.stop(query); safeComplete(nil, nil, nil) }
         }
