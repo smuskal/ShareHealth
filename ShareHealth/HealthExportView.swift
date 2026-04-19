@@ -507,12 +507,11 @@ struct HealthExportView: View {
         }
     }
 
-    /// Export the 6 days prior to the selected date in the background, one at a time
+    /// Export the 6 days prior to the selected date in the background, in parallel
     private func exportTrailingDays(to folderURL: URL, excludingDate: Date) {
         let calendar = Calendar.current
         let excludedDay = calendar.startOfDay(for: excludingDate)
 
-        // Build the list of dates to export
         var datesToExport: [Date] = []
         for daysBack in 1...6 {
             if let date = calendar.date(byAdding: .day, value: -daysBack, to: excludedDay) {
@@ -520,41 +519,53 @@ struct HealthExportView: View {
             }
         }
 
-        // Export sequentially on a background queue to avoid overwhelming HealthKit
-        DispatchQueue.global(qos: .utility).async {
-            let semaphore = DispatchSemaphore(value: 0)
+        // Run at .userInitiated to avoid priority inversion with fetchAllHealthData's internal queue,
+        // and hold the security-scoped access open for the whole batch instead of reacquiring per file.
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard folderURL.startAccessingSecurityScopedResource() else {
+                print("Trailing 6-day export: failed to access folder")
+                return
+            }
+
+            let group = DispatchGroup()
+            // Run up to 3 days in parallel. fetchAllHealthData uses its own per-call
+            // state (local dict, lock, group), so concurrent invocations are race-free.
+            let dayConcurrency = DispatchSemaphore(value: 3)
 
             for date in datesToExport {
+                dayConcurrency.wait()
+                group.enter()
+
                 self.exporter.exportHealthDataRaw(for: date) { healthData in
-                    defer { semaphore.signal() }
-                    guard let healthData = healthData else { return }
-
-                    let csvURL = self.exporter.generateCSV(date: date, data: healthData)
-                    guard let csvURL = csvURL else { return }
-
-                    self.copyToDefaultFolderSilently(from: csvURL, to: folderURL, for: date)
+                    defer {
+                        dayConcurrency.signal()
+                        group.leave()
+                    }
+                    guard let healthData = healthData,
+                          let csvURL = self.exporter.generateCSV(date: date, data: healthData) else {
+                        return
+                    }
+                    self.writeTrailingCSV(from: csvURL, to: folderURL, for: date)
                 }
-                semaphore.wait()
             }
+
+            group.wait()
+            folderURL.stopAccessingSecurityScopedResource()
             print("Trailing 6-day export complete")
         }
     }
 
-    /// Copy a CSV to the default folder without showing success/error alerts (for background trailing-day exports)
-    private func copyToDefaultFolderSilently(from sourceURL: URL, to folderURL: URL, for date: Date) {
-        guard folderURL.startAccessingSecurityScopedResource() else { return }
-        defer { folderURL.stopAccessingSecurityScopedResource() }
-
+    /// Write a CSV into the default folder. Caller must already hold the security-scoped access.
+    private func writeTrailingCSV(from sourceURL: URL, to folderURL: URL, for date: Date) {
         do {
             let yearMonthPath = formatYearMonth(date)
             let subfolderURL = folderURL.appendingPathComponent(yearMonthPath, isDirectory: true)
 
-            if !FileManager.default.fileExists(atPath: subfolderURL.path) {
-                try FileManager.default.createDirectory(at: subfolderURL, withIntermediateDirectories: true)
-            }
+            // withIntermediateDirectories: true is idempotent, so concurrent day exports
+            // targeting the same YYYY/MM folder can both call this safely.
+            try FileManager.default.createDirectory(at: subfolderURL, withIntermediateDirectories: true)
 
-            let fileName = sourceURL.lastPathComponent
-            let destinationURL = subfolderURL.appendingPathComponent(fileName)
+            let destinationURL = subfolderURL.appendingPathComponent(sourceURL.lastPathComponent)
 
             if FileManager.default.fileExists(atPath: destinationURL.path) {
                 try FileManager.default.removeItem(at: destinationURL)

@@ -558,7 +558,10 @@ class HealthDataExporter: ObservableObject {
             group.leave()
         }
 
-        group.notify(queue: .main) {
+        // Notify off main so CSV generation + file I/O in the completion don't block the UI
+        // or serialize trailing-day exports on the main queue. Callers that need main dispatch
+        // explicitly (exportHealthData updates @Published state) already do so themselves.
+        group.notify(queue: DispatchQueue.global(qos: .userInitiated)) {
             completion(healthData)
         }
     }
@@ -630,7 +633,7 @@ class HealthDataExporter: ObservableObject {
         healthStore.execute(query)
 
         // Timeout: if HealthKit doesn't respond within 15 seconds, skip this metric and move on
-        DispatchQueue.global().asyncAfter(deadline: .now() + 15.0) { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 15.0) { [weak self] in
             completionLock.lock()
             let alreadyDone = hasCompleted
             completionLock.unlock()
@@ -674,7 +677,7 @@ class HealthDataExporter: ObservableObject {
 
         healthStore.execute(query)
 
-        DispatchQueue.global().asyncAfter(deadline: .now() + 15.0) { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 15.0) { [weak self] in
             completionLock.lock()
             let done = hasCompleted
             completionLock.unlock()
@@ -926,7 +929,7 @@ class HealthDataExporter: ObservableObject {
 
         healthStore.execute(query)
 
-        DispatchQueue.global().asyncAfter(deadline: .now() + 20.0) { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 20.0) { [weak self] in
             completionLock.lock()
             let done = hasCompleted
             completionLock.unlock()
@@ -960,7 +963,7 @@ class HealthDataExporter: ObservableObject {
         }
 
         healthStore.execute(query)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 15.0) { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 15.0) { [weak self] in
             lock.lock(); let done = hasCompleted; lock.unlock()
             if !done { print("⚠️ Timeout: Mindful Minutes"); self?.healthStore.stop(query); safeComplete(nil) }
         }
@@ -988,7 +991,7 @@ class HealthDataExporter: ObservableObject {
         }
 
         healthStore.execute(query)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 15.0) { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 15.0) { [weak self] in
             lock.lock(); let done = hasCompleted; lock.unlock()
             if !done { print("⚠️ Timeout: Handwashing"); self?.healthStore.stop(query); safeComplete(nil) }
         }
@@ -1016,7 +1019,7 @@ class HealthDataExporter: ObservableObject {
         }
 
         healthStore.execute(query)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 15.0) { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 15.0) { [weak self] in
             lock.lock(); let done = hasCompleted; lock.unlock()
             if !done { print("⚠️ Timeout: Toothbrushing"); self?.healthStore.stop(query); safeComplete(nil) }
         }
@@ -1046,7 +1049,7 @@ class HealthDataExporter: ObservableObject {
         }
 
         healthStore.execute(query)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 15.0) { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 15.0) { [weak self] in
             lock.lock(); let done = hasCompleted; lock.unlock()
             if !done { print("⚠️ Timeout: Stand Hours"); self?.healthStore.stop(query); safeComplete(nil) }
         }
@@ -1082,7 +1085,7 @@ class HealthDataExporter: ObservableObject {
         }
 
         healthStore.execute(query)
-        DispatchQueue.global().asyncAfter(deadline: .now() + 15.0) { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 15.0) { [weak self] in
             lock.lock(); let done = hasCompleted; lock.unlock()
             if !done { print("⚠️ Timeout: Sexual Activity"); self?.healthStore.stop(query); safeComplete(nil, nil, nil) }
         }
