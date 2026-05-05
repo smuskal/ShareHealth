@@ -17,6 +17,9 @@ struct HealthExportView: View {
     @State private var defaultFolderURL: URL? = nil
     @State private var defaultFolderName: String = ""
 
+    // Per-sample export (CGM + dietary, written to samples/YYYY/MM/)
+    @AppStorage("exportPerSample") private var exportPerSample = true
+
     // Face imagery feature
     @AppStorage("includeFaceImagery") private var includeFaceImagery = false
     @State private var showingFaceCapture = false
@@ -174,8 +177,41 @@ struct HealthExportView: View {
             dateSelectionSection
             exportLocationSection
             fileNamingSection
+            perSampleSection
             faceImagerySection
         }
+    }
+
+    // MARK: - Per-Sample Export Toggle
+    private var perSampleSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle(isOn: $exportPerSample) {
+                HStack(spacing: 12) {
+                    Image(systemName: "drop.fill")
+                        .font(.title2)
+                        .foregroundColor(.red)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Export Per-Sample CSVs")
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+
+                        Text("CGM glucose + dietary nutrition, one row per HealthKit sample")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .toggleStyle(SwitchToggleStyle(tint: .green))
+
+            if exportPerSample {
+                Text("Saved alongside HealthMetrics in YYYY/MM/{BloodGlucose,Dietary}-YYYY-MM-DD.csv")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .padding(.leading, 36)
+            }
+        }
+        .padding(.horizontal)
     }
 
     // MARK: - Date Selection
@@ -501,8 +537,59 @@ struct HealthExportView: View {
                     self.copyToDefaultFolder(from: tempURL, to: folderURL)
                 }
 
+                // Per-sample CSVs for the selected date — written into samples/YYYY/MM/.
+                // Runs alongside (independent of) face capture; failures are logged, never block.
+                if self.exportPerSample {
+                    self.exportPerSampleForDate(self.selectedDate, to: folderURL)
+                }
+
                 // Export trailing 6 days in the background (selected date already handled above)
                 self.exportTrailingDays(to: folderURL, excludingDate: self.selectedDate)
+            }
+        }
+    }
+
+    /// Generate per-sample CSVs (BloodGlucose, Dietary*) for one date and copy them
+    /// into <folderURL>/samples/YYYY/MM/. Caller must NOT already hold the security-scoped
+    /// access — this method acquires it for the copy.
+    private func exportPerSampleForDate(_ date: Date, to folderURL: URL) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.exporter.exportPerSampleDataRaw(for: date) { results in
+                guard !results.isEmpty else { return }
+                guard folderURL.startAccessingSecurityScopedResource() else {
+                    print("Per-sample export: failed to access folder for \(date)")
+                    return
+                }
+                defer { folderURL.stopAccessingSecurityScopedResource() }
+
+                self.writePerSampleCSVs(results: results, to: folderURL, for: date)
+            }
+        }
+    }
+
+    /// Caller must already hold the security-scoped access. Per-sample CSVs are written
+    /// into the same YYYY/MM folder as HealthMetrics-*.csv (co-located, not nested).
+    private func writePerSampleCSVs(results: [HealthDataExporter.PerSampleResult], to folderURL: URL, for date: Date) {
+        let yearMonth = formatYearMonth(date)
+        let destFolder = folderURL.appendingPathComponent(yearMonth, isDirectory: true)
+
+        do {
+            try FileManager.default.createDirectory(at: destFolder, withIntermediateDirectories: true)
+        } catch {
+            print("Per-sample export: failed to create \(yearMonth) — \(error.localizedDescription)")
+            return
+        }
+
+        for result in results {
+            let destURL = destFolder.appendingPathComponent(result.tempURL.lastPathComponent)
+            do {
+                if FileManager.default.fileExists(atPath: destURL.path) {
+                    try FileManager.default.removeItem(at: destURL)
+                }
+                try FileManager.default.copyItem(at: result.tempURL, to: destURL)
+                print("Per-sample saved: \(destURL.path) (\(result.sampleCount) rows)")
+            } catch {
+                print("Per-sample copy failed for \(result.tempURL.lastPathComponent): \(error.localizedDescription)")
             }
         }
     }
@@ -537,15 +624,26 @@ struct HealthExportView: View {
                 group.enter()
 
                 self.exporter.exportHealthDataRaw(for: date) { healthData in
-                    defer {
+                    if let healthData = healthData,
+                       let csvURL = self.exporter.generateCSV(date: date, data: healthData) {
+                        self.writeTrailingCSV(from: csvURL, to: folderURL, for: date)
+                    }
+
+                    // Per-sample CSVs for this trailing day (independent fetch — daily aggregate
+                    // and per-sample don't share state). Inline the write since we already hold
+                    // the security-scoped access acquired above.
+                    if self.exportPerSample {
+                        self.exporter.exportPerSampleDataRaw(for: date) { results in
+                            if !results.isEmpty {
+                                self.writePerSampleCSVs(results: results, to: folderURL, for: date)
+                            }
+                            dayConcurrency.signal()
+                            group.leave()
+                        }
+                    } else {
                         dayConcurrency.signal()
                         group.leave()
                     }
-                    guard let healthData = healthData,
-                          let csvURL = self.exporter.generateCSV(date: date, data: healthData) else {
-                        return
-                    }
-                    self.writeTrailingCSV(from: csvURL, to: folderURL, for: date)
                 }
             }
 

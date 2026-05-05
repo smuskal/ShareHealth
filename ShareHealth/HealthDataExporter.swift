@@ -17,6 +17,27 @@ struct HealthMetric {
     }
 }
 
+/// A single HealthKit quantity type to be exported per HKQuantitySample.
+/// `metricName` is the short label written in the CSV's `metric` column when
+/// multiple metrics share one file (e.g. "carbs" inside Dietary-*.csv).
+struct PerSampleMetric {
+    let identifier: HKQuantityTypeIdentifier
+    let unit: HKUnit
+    let unitDisplayName: String
+    let metricName: String
+}
+
+/// A group of one or more PerSampleMetrics that share a single CSV file at
+/// `samples/YYYY/MM/<fileSlug>-YYYY-MM-DD.csv`. Single-metric groups (e.g. blood
+/// glucose) get a flat schema; multi-metric groups (e.g. dietary nutrition) get a
+/// `metric` column so a meal logged with 6 nutrient samples appears as 6 rows
+/// sharing the same start_date in one file.
+struct PerSampleGroup {
+    let fileSlug: String
+    let metrics: [PerSampleMetric]
+    var includesMetricColumn: Bool { metrics.count > 1 }
+}
+
 class HealthDataExporter: ObservableObject {
     let healthStore = HKHealthStore()
 
@@ -170,6 +191,33 @@ class HealthDataExporter: ObservableObject {
         // Underwater
         HealthMetric(identifier: .underwaterDepth, csvHeader: "Underwater Depth (ft)", unit: .foot(), aggregation: .average),
     ]
+
+    // Per-sample export groups. Blood glucose lives alone (high volume, ~288/day from
+    // a CGM, no cross-metric correlation). The 6 dietary nutrients share one file with
+    // a `metric` column — a meal log emits 6 samples sharing one start_date, so a single
+    // Dietary-*.csv lets you reconstruct meals via GROUP BY start_date instead of joining
+    // 6 files. Auth for all identifiers is already granted via `quantityMetrics`.
+    static let perSampleGroups: [PerSampleGroup] = [
+        PerSampleGroup(fileSlug: "BloodGlucose", metrics: [
+            PerSampleMetric(identifier: .bloodGlucose, unit: HKUnit(from: "mg/dL"), unitDisplayName: "mg/dL", metricName: "glucose"),
+        ]),
+        PerSampleGroup(fileSlug: "Dietary", metrics: [
+            PerSampleMetric(identifier: .dietaryCarbohydrates,  unit: .gram(),        unitDisplayName: "g",    metricName: "carbs"),
+            PerSampleMetric(identifier: .dietarySugar,          unit: .gram(),        unitDisplayName: "g",    metricName: "sugar"),
+            PerSampleMetric(identifier: .dietaryProtein,        unit: .gram(),        unitDisplayName: "g",    metricName: "protein"),
+            PerSampleMetric(identifier: .dietaryFiber,          unit: .gram(),        unitDisplayName: "g",    metricName: "fiber"),
+            PerSampleMetric(identifier: .dietaryFatTotal,       unit: .gram(),        unitDisplayName: "g",    metricName: "fat"),
+            PerSampleMetric(identifier: .dietaryEnergyConsumed, unit: .kilocalorie(), unitDisplayName: "kcal", metricName: "energy"),
+        ]),
+    ]
+
+    // ISO 8601 in UTC (e.g. "2024-08-05T07:02:14Z") so per-sample timestamps are
+    // unambiguous across timezones and DST. Downstream tools can convert to local.
+    private static let iso8601Formatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
 
     // CSV column order matching the example file
     private let csvColumnOrder: [String] = [
@@ -1102,6 +1150,190 @@ class HealthDataExporter: ObservableObject {
     /// Export health data for a date and return raw data dictionary (for batch exports)
     func exportHealthDataRaw(for date: Date, completion: @escaping ([String: String]?) -> Void) {
         fetchAllHealthData(for: date, reportProgress: false, completion: completion)
+    }
+
+    // MARK: - Per-Sample Export (parallel tree, does not touch daily-aggregate CSVs)
+
+    /// One per-group result. The CSV at tempURL contains all samples for every metric in
+    /// the group, sorted by start_date so meal-time clusters appear together.
+    struct PerSampleResult {
+        let group: PerSampleGroup
+        let tempURL: URL
+        let sampleCount: Int
+    }
+
+    /// Fetch every HKQuantitySample for a single per-sample metric in [startDate, endDate),
+    /// sorted ascending by startDate. Returns nil only on hard failure or timeout; an empty
+    /// array means "no samples that day."
+    private func fetchPerSampleData(metric: PerSampleMetric,
+                                    startDate: Date,
+                                    endDate: Date,
+                                    completion: @escaping ([HKQuantitySample]?) -> Void) {
+        guard let quantityType = HKQuantityType.quantityType(forIdentifier: metric.identifier) else {
+            completion(nil)
+            return
+        }
+
+        let predicate = HKQuery.predicateForSamples(withStart: startDate, end: endDate, options: .strictStartDate)
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierStartDate, ascending: true)
+
+        var hasCompleted = false
+        let lock = NSLock()
+        let safeComplete: ([HKQuantitySample]?) -> Void = { samples in
+            lock.lock()
+            guard !hasCompleted else { lock.unlock(); return }
+            hasCompleted = true
+            lock.unlock()
+            completion(samples)
+        }
+
+        let query = HKSampleQuery(sampleType: quantityType,
+                                  predicate: predicate,
+                                  limit: HKObjectQueryNoLimit,
+                                  sortDescriptors: [sort]) { _, samples, _ in
+            safeComplete(samples as? [HKQuantitySample] ?? [])
+        }
+
+        healthStore.execute(query)
+
+        // 30s — CGM days yield ~288 samples, dietary far fewer; this is plenty.
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 30.0) { [weak self] in
+            lock.lock(); let done = hasCompleted; lock.unlock()
+            if !done {
+                print("⚠️ Timeout fetching per-sample \(metric.metricName)")
+                self?.healthStore.stop(query)
+                safeComplete(nil)
+            }
+        }
+    }
+
+    /// For one date, fetch every metric in every group in parallel, then assemble one CSV
+    /// per group. Empty groups produce no file (so days without dietary data don't create
+    /// empty Dietary-*.csv files; days without a CGM don't create empty BloodGlucose-*.csv).
+    func exportPerSampleDataRaw(for date: Date, completion: @escaping ([PerSampleResult]) -> Void) {
+        let calendar = Calendar.current
+        let startOfDay = calendar.startOfDay(for: date)
+        guard let endOfDay = calendar.date(byAdding: .day, value: 1, to: startOfDay) else {
+            completion([])
+            return
+        }
+
+        var results: [PerSampleResult] = []
+        let resultsLock = NSLock()
+        let topGroup = DispatchGroup()
+
+        for psGroup in Self.perSampleGroups {
+            topGroup.enter()
+
+            // Fetch all metrics in this group concurrently. Each metric yields its own
+            // sample array; we merge them into a single sorted CSV at the end.
+            var perMetricSamples: [(metric: PerSampleMetric, samples: [HKQuantitySample])] = []
+            let metricsLock = NSLock()
+            let innerGroup = DispatchGroup()
+
+            for metric in psGroup.metrics {
+                innerGroup.enter()
+                fetchPerSampleData(metric: metric, startDate: startOfDay, endDate: endOfDay) { samples in
+                    defer { innerGroup.leave() }
+                    guard let samples = samples, !samples.isEmpty else { return }
+                    metricsLock.lock()
+                    perMetricSamples.append((metric: metric, samples: samples))
+                    metricsLock.unlock()
+                }
+            }
+
+            innerGroup.notify(queue: DispatchQueue.global(qos: .userInitiated)) {
+                defer { topGroup.leave() }
+                guard !perMetricSamples.isEmpty else { return }
+
+                let totalCount = perMetricSamples.reduce(0) { $0 + $1.samples.count }
+                guard let tempURL = self.generatePerSampleCSV(date: date, group: psGroup, perMetricSamples: perMetricSamples) else { return }
+
+                resultsLock.lock()
+                results.append(PerSampleResult(group: psGroup, tempURL: tempURL, sampleCount: totalCount))
+                resultsLock.unlock()
+            }
+        }
+
+        topGroup.notify(queue: DispatchQueue.global(qos: .userInitiated)) {
+            completion(results)
+        }
+    }
+
+    /// Write the per-group CSV. Single-metric groups omit the `metric` column; multi-metric
+    /// groups include it, with rows sorted by start_date so a meal's 6 nutrient samples
+    /// appear as a contiguous block.
+    private func generatePerSampleCSV(date: Date,
+                                      group: PerSampleGroup,
+                                      perMetricSamples: [(metric: PerSampleMetric, samples: [HKQuantitySample])]) -> URL? {
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        let dateString = dateFormatter.string(from: date)
+
+        let header: String = group.includesMetricColumn
+            ? "start_date,end_date,metric,value,unit,source_name,source_bundle_id,uuid\n"
+            : "start_date,end_date,value,unit,source_name,source_bundle_id,uuid\n"
+
+        // Flatten and sort: by start_date asc, then by the group's declared metric order
+        // so a multi-nutrient meal logs in a stable, readable sequence (carbs, sugar,
+        // protein, fiber, fat, energy).
+        let metricOrder: [HKQuantityTypeIdentifier: Int] = Dictionary(
+            uniqueKeysWithValues: group.metrics.enumerated().map { ($0.element.identifier, $0.offset) }
+        )
+
+        struct Row {
+            let metric: PerSampleMetric
+            let sample: HKQuantitySample
+        }
+        var rows: [Row] = []
+        rows.reserveCapacity(perMetricSamples.reduce(0) { $0 + $1.samples.count })
+        for (metric, samples) in perMetricSamples {
+            for sample in samples {
+                rows.append(Row(metric: metric, sample: sample))
+            }
+        }
+        rows.sort { a, b in
+            if a.sample.startDate != b.sample.startDate { return a.sample.startDate < b.sample.startDate }
+            let aOrder = metricOrder[a.metric.identifier] ?? 0
+            let bOrder = metricOrder[b.metric.identifier] ?? 0
+            return aOrder < bOrder
+        }
+
+        var content = header
+        for row in rows {
+            let start = Self.iso8601Formatter.string(from: row.sample.startDate)
+            let end = Self.iso8601Formatter.string(from: row.sample.endDate)
+            let value = row.sample.quantity.doubleValue(for: row.metric.unit)
+            let valueStr = formatValue(value)
+            let sourceName = csvEscape(row.sample.sourceRevision.source.name)
+            let sourceBundle = csvEscape(row.sample.sourceRevision.source.bundleIdentifier)
+            let uuid = row.sample.uuid.uuidString
+
+            if group.includesMetricColumn {
+                content += "\(start),\(end),\(row.metric.metricName),\(valueStr),\(row.metric.unitDisplayName),\(sourceName),\(sourceBundle),\(uuid)\n"
+            } else {
+                content += "\(start),\(end),\(valueStr),\(row.metric.unitDisplayName),\(sourceName),\(sourceBundle),\(uuid)\n"
+            }
+        }
+
+        let fileName = "\(group.fileSlug)-\(dateString).csv"
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+
+        do {
+            try content.write(to: tempURL, atomically: true, encoding: .utf8)
+            return tempURL
+        } catch {
+            print("Failed to write per-sample CSV \(fileName): \(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    private func csvEscape(_ value: String) -> String {
+        if value.contains(",") || value.contains("\"") || value.contains("\n") {
+            let escaped = value.replacingOccurrences(of: "\"", with: "\"\"")
+            return "\"\(escaped)\""
+        }
+        return value
     }
 
     func generateCSV(date: Date, data: [String: String]) -> URL? {

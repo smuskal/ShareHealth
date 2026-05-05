@@ -32,6 +32,10 @@ struct HistoricalExportView: View {
     @State private var includeFaceImages = true
     @State private var faceImagesExported: Int = 0
 
+    // Per-sample export options (CGM glucose + dietary nutrition)
+    @AppStorage("historicalExportPerSample") private var includePerSampleExport = true
+    @State private var perSampleFilesExported: Int = 0
+
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
@@ -322,6 +326,33 @@ struct HistoricalExportView: View {
             Text("Export Options")
                 .font(.headline)
 
+            Toggle(isOn: $includePerSampleExport) {
+                HStack {
+                    Image(systemName: "drop.fill")
+                        .foregroundColor(.red)
+                    VStack(alignment: .leading) {
+                        Text("Include Per-Sample CSVs")
+                            .font(.subheadline)
+                        Text("CGM glucose + dietary nutrition, raw HealthKit samples")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .tint(.green)
+
+            if includePerSampleExport {
+                HStack {
+                    Image(systemName: "info.circle")
+                        .foregroundColor(.blue)
+                    Text("Written alongside HealthMetrics in the same YYYY/MM folder")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
+            Divider()
+
             Toggle(isOn: $includeFaceImages) {
                 HStack {
                     Image(systemName: "person.crop.circle")
@@ -382,6 +413,13 @@ struct HistoricalExportView: View {
                 .fontWeight(.medium)
                 .foregroundColor(.orange)
 
+            if includePerSampleExport {
+                Text("+ YYYY/MM/BloodGlucose-*.csv and Dietary-*.csv alongside HealthMetrics")
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                    .foregroundColor(.red)
+            }
+
             if includeFaceImages {
                 Text("+ faces/YYYY/MM/Face-*.jpg with JSONs")
                     .font(.caption2)
@@ -399,6 +437,9 @@ struct HistoricalExportView: View {
 
     private var exportCompleteMessage: String {
         var message = "\(filesExported) daily CSV files exported"
+        if perSampleFilesExported > 0 {
+            message += ", \(perSampleFilesExported) per-sample CSVs"
+        }
         if faceImagesExported > 0 {
             message += ", \(faceImagesExported) face images"
         }
@@ -500,6 +541,7 @@ struct HistoricalExportView: View {
         exportProgress = 0.0
         currentExportStatus = "Preparing export..."
         filesExported = 0
+        perSampleFilesExported = 0
         failedDays = []
         exportLog = []
 
@@ -558,6 +600,7 @@ struct HistoricalExportView: View {
 
         var dayIndex = 0
         var exportedCount = 0
+        var perSampleCount = 0
         var failedCount = 0
         var localFailedDays: [String] = []
 
@@ -597,6 +640,14 @@ struct HistoricalExportView: View {
                     try csvContent.write(to: fileURL, atomically: true, encoding: .utf8)
                     exportedCount += 1
 
+                    // Per-sample CSVs for this day (CGM + dietary). Empty days produce no
+                    // files. Independent of the daily-aggregate write above — those files
+                    // are written exactly as before, format unchanged.
+                    if includePerSampleExport {
+                        let written = await exportPerSampleCSVs(date: currentDate, to: folderURL)
+                        perSampleCount += written
+                    }
+
                     // Log every 10 days or on specific milestones
                     if dayIndex % 10 == 0 || dayIndex == 1 {
                         await MainActor.run {
@@ -634,14 +685,59 @@ struct HistoricalExportView: View {
 
         await MainActor.run {
             filesExported = exportedCount
+            perSampleFilesExported = perSampleCount
             faceImagesExported = facesExported
             failedDays = localFailedDays
             exportProgress = 1.0
             currentExportStatus = "Export complete!"
             isExporting = false
-            logMessage("Export finished: \(exportedCount) CSVs, \(facesExported) faces, \(failedCount) failed")
+            logMessage("Export finished: \(exportedCount) CSVs, \(perSampleCount) per-sample CSVs, \(facesExported) faces, \(failedCount) failed")
             showingSuccess = true
         }
+    }
+
+    /// Per-sample CSVs (BloodGlucose + Dietary) for one date, written into the SAME
+    /// YYYY/MM folder as HealthMetrics-*.csv. Caller must already hold the security-scoped
+    /// access on folderURL. Returns the count of CSV files written.
+    private func exportPerSampleCSVs(date: Date, to folderURL: URL) async -> Int {
+        let results: [HealthDataExporter.PerSampleResult] = await withCheckedContinuation { continuation in
+            exporter.exportPerSampleDataRaw(for: date) { results in
+                continuation.resume(returning: results)
+            }
+        }
+
+        guard !results.isEmpty else { return 0 }
+
+        let yearMonth = formatYearMonth(date)
+        let destFolder = folderURL.appendingPathComponent(yearMonth, isDirectory: true)
+
+        do {
+            if !FileManager.default.fileExists(atPath: destFolder.path) {
+                try FileManager.default.createDirectory(at: destFolder, withIntermediateDirectories: true)
+            }
+        } catch {
+            await MainActor.run {
+                logMessage("Per-sample: failed to create \(yearMonth) — \(error.localizedDescription)")
+            }
+            return 0
+        }
+
+        var written = 0
+        for result in results {
+            let destURL = destFolder.appendingPathComponent(result.tempURL.lastPathComponent)
+            do {
+                if FileManager.default.fileExists(atPath: destURL.path) {
+                    try FileManager.default.removeItem(at: destURL)
+                }
+                try FileManager.default.copyItem(at: result.tempURL, to: destURL)
+                written += 1
+            } catch {
+                await MainActor.run {
+                    logMessage("Per-sample copy failed: \(result.tempURL.lastPathComponent) — \(error.localizedDescription)")
+                }
+            }
+        }
+        return written
     }
 
     /// Export face images with their JSON files to the export folder
