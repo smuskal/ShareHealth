@@ -157,8 +157,13 @@ class FaceHealthModelTrainer {
                         looModel = .forest(rfModel)
                     }
 
-                    // Predict on held-out day
-                    let prediction = self.predict(model: looModel, features: sortedDays[i].avgFeatures)
+                    // Predict on held-out day, clamped to training range
+                    var prediction = self.predict(model: looModel, features: sortedDays[i].avgFeatures)
+                    if let tMin = trainTargets.min(), let tMax = trainTargets.max() {
+                        let range = tMax - tMin
+                        let margin = range * 0.5
+                        prediction = Swift.min(Swift.max(prediction, tMin - margin), tMax + margin)
+                    }
                     dayPredictions.append((actual: sortedDays[i].latestTarget, predicted: prediction))
                 }
 
@@ -166,8 +171,10 @@ class FaceHealthModelTrainer {
                 let predicted = dayPredictions.map { $0.predicted }
                 let correlation = self.calculateCorrelation(actual: actuals, predicted: predicted)
 
-                // Save model
-                try self.saveModel(model, for: targetId, correlation: correlation, modelType: useModelType)
+                // Save model with training data range for prediction clamping
+                let targetMin = allTargets.min()
+                let targetMax = allTargets.max()
+                try self.saveModel(model, for: targetId, correlation: correlation, modelType: useModelType, targetMin: targetMin, targetMax: targetMax)
 
                 completion(.success(correlation))
             } catch {
@@ -224,7 +231,34 @@ class FaceHealthModelTrainer {
             result.append((dayKey: dayKey, avgFeatures: avgFeatures, latestTarget: latestTarget, latestDate: latestDate, captureIds: captureIds))
         }
 
-        return result
+        // Remove outliers using IQR method to filter bad data
+        // (e.g., scales writing lean body mass in wrong units to HealthKit)
+        return removeOutliers(from: result)
+    }
+
+    /// Remove statistical outliers from training data using IQR method.
+    /// Handles cases where HealthKit source devices write values in incorrect units.
+    private func removeOutliers(from data: [(dayKey: String, avgFeatures: [Double], latestTarget: Double, latestDate: Date, captureIds: [String])]) -> [(dayKey: String, avgFeatures: [Double], latestTarget: Double, latestDate: Date, captureIds: [String])] {
+        guard data.count >= 4 else { return data }
+
+        let targets = data.map { $0.latestTarget }.sorted()
+        let q1Index = targets.count / 4
+        let q3Index = (targets.count * 3) / 4
+        let q1 = targets[q1Index]
+        let q3 = targets[q3Index]
+        let iqr = q3 - q1
+
+        // Use 3x IQR for a generous outlier threshold (only reject extreme values)
+        let lowerBound = q1 - 3.0 * iqr
+        let upperBound = q3 + 3.0 * iqr
+
+        let filtered = data.filter { $0.latestTarget >= lowerBound && $0.latestTarget <= upperBound }
+
+        if filtered.count < data.count {
+            print("Outlier filter: removed \(data.count - filtered.count) days with values outside [\(String(format: "%.1f", lowerBound)), \(String(format: "%.1f", upperBound))]")
+        }
+
+        return filtered
     }
 
     // MARK: - Feature Extraction
@@ -295,8 +329,53 @@ class FaceHealthModelTrainer {
             // For custom targets, the targetId is the health data key
             guard let value = healthData[targetId],
                   let numValue = Double(value) else { return nil }
-            return numValue
+
+            // Apply unit correction for mass metrics where HealthKit source
+            // devices may write values in wrong units (e.g., grams declared as kg,
+            // or weight*percentage instead of weight*fraction)
+            return Self.correctMassUnit(value: numValue, targetId: targetId)
         }
+    }
+
+    /// Detects and corrects mass values that are clearly in the wrong unit.
+    /// Some scales/fitness apps write lean body mass with incorrect units to HealthKit,
+    /// resulting in values 100x too large (e.g., 10,000+ instead of ~100-200 lb).
+    static func correctMassUnit(value: Double, targetId: String) -> Double {
+        // Only apply to mass metrics (lb or kg)
+        if targetId.contains("(lb)") {
+            // Physical maximum for any human body mass metric in pounds
+            // (even a 400 lb person's lean mass would be < 350 lb)
+            if value > 500 {
+                // Value is impossibly large for pounds. Most likely the source
+                // device wrote the value with an incorrect unit multiplier.
+                // Divide by the detected scale factor to normalize to pounds.
+                // Common case: value is ~100x too large (weight * percentage instead of fraction)
+                let corrected = value / 100.0
+                if corrected >= 30 && corrected <= 500 {
+                    return corrected
+                }
+                // Try grams-to-pounds conversion
+                let gramsToLb = value / 453.592
+                if gramsToLb >= 30 && gramsToLb <= 500 {
+                    return gramsToLb
+                }
+                // Value is garbage regardless of correction, skip it
+                return value  // Will be caught by outlier filter
+            }
+        } else if targetId.contains("(kg)") {
+            if value > 250 {
+                let corrected = value / 100.0
+                if corrected >= 15 && corrected <= 250 {
+                    return corrected
+                }
+                let gramsToKg = value / 1000.0
+                if gramsToKg >= 15 && gramsToKg <= 250 {
+                    return gramsToKg
+                }
+                return value
+            }
+        }
+        return value
     }
 
     /// Check how many samples have data for a given target
@@ -639,7 +718,30 @@ class FaceHealthModelTrainer {
     func predict(for targetId: String, metrics: FacialMetrics) -> Double? {
         guard let (model, _) = loadModel(for: targetId) else { return nil }
         let features = extractFeaturesForPrediction(from: metrics)
-        return predict(model: model, features: features)
+        var prediction = predict(model: model, features: features)
+
+        // Clamp prediction to training data range (with 50% margin) to prevent
+        // wild extrapolation from ill-conditioned linear regression
+        if let metadata = loadMetadata(for: targetId),
+           let min = metadata.targetMin,
+           let max = metadata.targetMax {
+            let range = max - min
+            let margin = range * 0.5
+            prediction = Swift.min(Swift.max(prediction, min - margin), max + margin)
+        }
+
+        return prediction
+    }
+
+    private func loadMetadata(for targetId: String) -> ModelMetadata? {
+        let safeId = sanitizeForFilename(targetId)
+        let metadataURL = modelsDirectory.appendingPathComponent("\(safeId)_metadata.json")
+        guard fileManager.fileExists(atPath: metadataURL.path),
+              let data = try? Data(contentsOf: metadataURL),
+              let metadata = try? JSONDecoder().decode(ModelMetadata.self, from: data) else {
+            return nil
+        }
+        return metadata
     }
 
     private func predict(model: TrainedModel, features: [Double]) -> Double {
@@ -743,8 +845,14 @@ class FaceHealthModelTrainer {
                 looModel = .forest(rfModel)
             }
 
-            // Predict on held-out day
-            let prediction = self.predict(model: looModel, features: sortedDays[i].avgFeatures)
+            // Predict on held-out day, clamped to training data range
+            // to prevent wild extrapolation from ill-conditioned models
+            var prediction = self.predict(model: looModel, features: sortedDays[i].avgFeatures)
+            if let tMin = trainTargets.min(), let tMax = trainTargets.max() {
+                let range = tMax - tMin
+                let margin = range * 0.5
+                prediction = Swift.min(Swift.max(prediction, tMin - margin), tMax + margin)
+            }
 
             allActuals.append(sortedDays[i].latestTarget)
             allPredictions.append(prediction)
@@ -815,7 +923,7 @@ class FaceHealthModelTrainer {
         return targetId.components(separatedBy: invalidChars).joined(separator: "_")
     }
 
-    private func saveModel(_ model: TrainedModel, for targetId: String, correlation: Double, modelType: ModelType) throws {
+    private func saveModel(_ model: TrainedModel, for targetId: String, correlation: Double, modelType: ModelType, targetMin: Double? = nil, targetMax: Double? = nil) throws {
         let safeId = sanitizeForFilename(targetId)
         let modelURL = modelsDirectory.appendingPathComponent("\(safeId)_model.json")
         let metadataURL = modelsDirectory.appendingPathComponent("\(safeId)_metadata.json")
@@ -823,13 +931,15 @@ class FaceHealthModelTrainer {
         let modelData = try JSONEncoder().encode(model)
         try modelData.write(to: modelURL)
 
-        let metadata = ModelMetadata(
+        var metadata = ModelMetadata(
             targetId: targetId,
             correlation: correlation,
             trainedAt: Date(),
             featureCount: FeatureNames.all.count,
             modelType: modelType
         )
+        metadata.targetMin = targetMin
+        metadata.targetMax = targetMax
         let metadataData = try JSONEncoder().encode(metadata)
         try metadataData.write(to: metadataURL)
     }
@@ -1067,6 +1177,8 @@ struct ModelMetadata: Codable {
     let featureCount: Int
     var modelType: ModelType = .linearRegression
     var isLOOCV: Bool = true  // Indicates if correlation is from LOO-CV
+    var targetMin: Double?
+    var targetMax: Double?
 }
 
 /// Results from leave-one-out cross-validation (daily aggregated)

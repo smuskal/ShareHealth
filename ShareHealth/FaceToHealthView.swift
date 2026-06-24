@@ -1257,7 +1257,25 @@ private struct PredictionRow: View {
         case "restingHR":
             return String(format: "%.0f bpm", max(0, value))
         default:
-            return String(format: "%.1f", value)
+            if targetId.hasSuffix("(lb)") {
+                return String(format: "%.1f lb", max(0, value))
+            } else if targetId.hasSuffix("(kg)") {
+                return String(format: "%.1f kg", max(0, value))
+            } else if targetId.hasSuffix("(kcal)") {
+                return String(format: "%.0f kcal", max(0, value))
+            } else if targetId.hasSuffix("(min)") {
+                return String(format: "%.0f min", max(0, value))
+            } else if targetId.hasSuffix("(%)") {
+                return String(format: "%.1f%%", max(0, min(100, value)))
+            } else if targetId.hasSuffix("(count)") {
+                return String(format: "%.0f", max(0, value))
+            } else if targetId.hasSuffix("(count/min)") {
+                return String(format: "%.0f bpm", max(0, value))
+            } else if targetId.hasSuffix("(ms)") {
+                return String(format: "%.0f ms", max(0, value))
+            } else {
+                return String(format: "%.1f", value)
+            }
         }
     }
 
@@ -2033,7 +2051,25 @@ private struct LivePredictionRow: View {
         case "restingHR":
             return String(format: "%.0f bpm", max(0, value))
         default:
-            return String(format: "%.1f", value)
+            if targetId.hasSuffix("(lb)") {
+                return String(format: "%.1f lb", max(0, value))
+            } else if targetId.hasSuffix("(kg)") {
+                return String(format: "%.1f kg", max(0, value))
+            } else if targetId.hasSuffix("(kcal)") {
+                return String(format: "%.0f kcal", max(0, value))
+            } else if targetId.hasSuffix("(min)") {
+                return String(format: "%.0f min", max(0, value))
+            } else if targetId.hasSuffix("(%)") {
+                return String(format: "%.1f%%", max(0, min(100, value)))
+            } else if targetId.hasSuffix("(count)") {
+                return String(format: "%.0f", max(0, value))
+            } else if targetId.hasSuffix("(count/min)") {
+                return String(format: "%.0f bpm", max(0, value))
+            } else if targetId.hasSuffix("(ms)") {
+                return String(format: "%.0f ms", max(0, value))
+            } else {
+                return String(format: "%.1f", value)
+            }
         }
     }
 
