@@ -19,6 +19,10 @@ struct ModelCVDetailView: View {
     private let trainer = FaceHealthModelTrainer()
     @ObservedObject private var dataStore = FacialDataStore.shared
 
+    private var effectiveTargetId: String {
+        HealthMetricTargetAliases.canonicalDisplayTargetId(targetId, displayName: targetName)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -83,11 +87,14 @@ struct ModelCVDetailView: View {
     private func reloadResultsFromDataStore() {
         let currentCaptures = dataStore.captures
         let tid = targetId
+        let tname = targetName
+        let effectiveTid = HealthMetricTargetAliases.canonicalDisplayTargetId(tid, displayName: tname)
+        HealthMetricDiagnostics.logModelDetailInput(targetId: tid, targetName: tname, captures: currentCaptures)
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let results = self.trainer.getCVResults(for: tid, captures: currentCaptures)
+            let results = self.trainer.getCVResults(for: effectiveTid, captures: currentCaptures)
             DispatchQueue.main.async {
-                self.cvResults = results
+                self.cvResults = Self.normalizeUnitsIfNeeded(results: results, targetId: effectiveTid, targetName: tname)
                 self.isLoading = false
             }
         }
@@ -123,14 +130,14 @@ struct ModelCVDetailView: View {
             HStack(spacing: 20) {
                 StatCard(
                     title: "MAE",
-                    value: formatValue(results.mae, for: targetId),
+                    value: formatValue(results.mae, for: results.targetId),
                     subtitle: "Mean Abs Error",
                     color: .orange
                 )
 
                 StatCard(
                     title: "RMSE",
-                    value: formatValue(results.rmse, for: targetId),
+                    value: formatValue(results.rmse, for: results.targetId),
                     subtitle: "Root Mean Sq Error",
                     color: .orange
                 )
@@ -204,8 +211,8 @@ struct ModelCVDetailView: View {
                 }
                 .chartXScale(domain: axisMin...axisMax)
                 .chartYScale(domain: axisMin...axisMax)
-                .chartXAxisLabel("Predicted \(unitForTarget(targetId))")
-                .chartYAxisLabel("Actual \(unitForTarget(targetId))")
+                .chartXAxisLabel("Predicted \(unitForTarget(results.targetId))")
+                .chartYAxisLabel("Actual \(unitForTarget(results.targetId))")
                 .chartOverlay { proxy in
                     GeometryReader { geometry in
                         Rectangle()
@@ -449,14 +456,75 @@ struct ModelCVDetailView: View {
         // Use local copy to avoid any threading issues
         let capturesCopy = captures
         let tid = targetId
+        let tname = targetName
+        let effectiveTid = effectiveTargetId
+        HealthMetricDiagnostics.logModelDetailInput(targetId: tid, targetName: tname, captures: capturesCopy)
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let results = self.trainer.getCVResults(for: tid, captures: capturesCopy)
+            let results = self.trainer.getCVResults(for: effectiveTid, captures: capturesCopy)
             DispatchQueue.main.async {
-                self.cvResults = results
+                self.cvResults = Self.normalizeUnitsIfNeeded(results: results, targetId: effectiveTid, targetName: tname)
                 self.isLoading = false
             }
         }
+    }
+
+    /// Final display guard for values from HealthKit sources that wrote mass data in wrong units.
+    private static func normalizeUnitsIfNeeded(results: ModelCVResults?, targetId: String, targetName: String) -> ModelCVResults? {
+        guard let results = results else { return nil }
+        guard !results.actuals.isEmpty else { return results }
+        let effectiveTargetId = HealthMetricTargetAliases.canonicalDisplayTargetId(targetId, displayName: targetName)
+
+        HealthMetricDiagnostics.logCVSeries(
+            context: "CV detail before normalization",
+            targetId: targetId,
+            targetName: targetName,
+            actuals: results.actuals,
+            predictions: results.predictions
+        )
+
+        let normalized = HealthMetricValueNormalizer.normalizePairedSeries(
+            actuals: results.actuals,
+            predictions: results.predictions,
+            targetId: effectiveTargetId
+        )
+
+        guard normalized.changed else {
+            return results
+        }
+
+        guard normalized.actuals.count >= 2 else {
+            return nil
+        }
+
+        print("CV detail unit correction: \(effectiveTargetId) corrected \(normalized.correctedActualCount) actuals, corrected \(normalized.correctedPredictionCount) predictions, dropped \(normalized.droppedCount) points")
+        HealthMetricDiagnostics.logCVSeries(
+            context: "CV detail after normalization",
+            targetId: effectiveTargetId,
+            targetName: targetName,
+            actuals: normalized.actuals,
+            predictions: normalized.predictions
+        )
+
+        guard let errorSummary = HealthMetricStatistics.errorSummary(
+            actuals: normalized.actuals,
+            predictions: normalized.predictions
+        ) else {
+            return nil
+        }
+
+        return ModelCVResults(
+            targetId: effectiveTargetId,
+            correlation: HealthMetricStatistics.correlation(actual: normalized.actuals, predicted: normalized.predictions),
+            sampleCount: normalized.actuals.count,
+            meanActual: errorSummary.meanActual,
+            mae: errorSummary.mae,
+            rmse: errorSummary.rmse,
+            actuals: normalized.actuals,
+            predictions: normalized.predictions,
+            dates: normalized.keptIndices.map { results.dates[$0] },
+            captureIds: normalized.keptIndices.map { results.captureIds[$0] }
+        )
     }
 
     private func correlationInterpretation(_ r: Double) -> String {
@@ -477,25 +545,12 @@ struct ModelCVDetailView: View {
     }
 
     private func formatValue(_ value: Double, for targetId: String) -> String {
-        switch targetId {
-        case "sleepScore":
-            return String(format: "%.1f", value)
-        case "hrv":
-            return String(format: "%.1f ms", value)
-        case "restingHR":
-            return String(format: "%.1f bpm", value)
-        default:
-            return String(format: "%.2f", value)
-        }
+        HealthMetricDisplayFormatter.formatPrediction(value, for: targetId, displayName: targetName)
     }
 
     private func unitForTarget(_ targetId: String) -> String {
-        switch targetId {
-        case "sleepScore": return "(score)"
-        case "hrv": return "(ms)"
-        case "restingHR": return "(bpm)"
-        default: return ""
-        }
+        let unit = HealthMetricDisplayFormatter.unitLabel(for: targetId, displayName: targetName)
+        return unit.isEmpty ? "" : "(\(unit))"
     }
 }
 
@@ -632,7 +687,7 @@ private struct ScatterPointDetailView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     if index < results.actuals.count {
-                        Text(String(format: "%.1f", results.actuals[index]))
+                        Text(HealthMetricDisplayFormatter.formatPrediction(results.actuals[index], for: results.targetId, displayName: targetName))
                             .font(.title2)
                             .fontWeight(.bold)
                             .foregroundColor(.green)
@@ -644,7 +699,7 @@ private struct ScatterPointDetailView: View {
                         .font(.caption)
                         .foregroundColor(.secondary)
                     if index < results.predictions.count {
-                        Text(String(format: "%.1f", results.predictions[index]))
+                        Text(HealthMetricDisplayFormatter.formatPrediction(results.predictions[index], for: results.targetId, displayName: targetName))
                             .font(.title2)
                             .fontWeight(.bold)
                             .foregroundColor(.blue)
@@ -657,7 +712,7 @@ private struct ScatterPointDetailView: View {
                         .foregroundColor(.secondary)
                     if index < results.actuals.count && index < results.predictions.count {
                         let error = results.actuals[index] - results.predictions[index]
-                        Text(String(format: "%+.1f", error))
+                        Text(HealthMetricDisplayFormatter.formatDelta(error, for: results.targetId, displayName: targetName))
                             .font(.title2)
                             .fontWeight(.bold)
                             .foregroundColor(error >= 0 ? .orange : .purple)

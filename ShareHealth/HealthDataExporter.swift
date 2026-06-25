@@ -672,6 +672,15 @@ class HealthDataExporter: ObservableObject {
                 if metric.unit == .percent() {
                     value = value * 100
                 }
+                if let normalizedValue = HealthMetricValueNormalizer.normalizedValue(value, targetId: metric.csvHeader) {
+                    if abs(value - normalizedValue) > max(0.000001, abs(value) * 0.000001) {
+                        print("Unit correction: \(metric.csvHeader) HealthKit value \(value) -> \(normalizedValue)")
+                    }
+                    value = normalizedValue
+                } else {
+                    safeComplete(nil)
+                    return
+                }
                 safeComplete(self.formatValue(value))
             } else {
                 safeComplete(nil)

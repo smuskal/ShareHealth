@@ -222,12 +222,12 @@ class FaceDataImporter: ObservableObject {
         if let healthURL = healthURL,
            let data = try? Data(contentsOf: healthURL),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
-            healthData = json
+            healthData = HealthMetricValueNormalizer.normalizeHealthData(json, context: "import \(baseName)")
         } else {
             let dateFormatter = DateFormatter()
             dateFormatter.dateFormat = "yyyy-MM-dd"
             let dateKey = dateFormatter.string(from: captureDate)
-            healthData = healthDataByDate[dateKey] ?? [:]
+            healthData = HealthMetricValueNormalizer.normalizeHealthData(healthDataByDate[dateKey] ?? [:], context: "import \(baseName)")
         }
 
         // Copy files directly to local storage (no re-encoding to preserve exact pixels)
@@ -395,7 +395,7 @@ class FaceDataImporter: ObservableObject {
             return nil
         }
 
-        return (dateString, data)
+        return (dateString, HealthMetricValueNormalizer.normalizeHealthData(data, context: "import csv \(dateString)"))
     }
 
     private func parseCSVRow(_ row: String) -> [String] {

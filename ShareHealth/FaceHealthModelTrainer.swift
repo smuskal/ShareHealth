@@ -99,12 +99,13 @@ class FaceHealthModelTrainer {
         modelType: ModelType? = nil,
         completion: @escaping (Result<Double, Error>) -> Void
     ) {
+        let resolvedTargetId = HealthMetricTargetAliases.canonicalDisplayTargetId(targetId)
         let useModelType = modelType ?? Self.currentModelType
 
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 // Aggregate data by day
-                let dayData = self.aggregateByDay(captures: captures, targetId: targetId)
+                let dayData = self.aggregateByDay(captures: captures, targetId: resolvedTargetId)
 
                 guard dayData.count >= 7 else {
                     throw ModelTrainerError.insufficientData(required: 7, actual: dayData.count)
@@ -169,12 +170,12 @@ class FaceHealthModelTrainer {
 
                 let actuals = dayPredictions.map { $0.actual }
                 let predicted = dayPredictions.map { $0.predicted }
-                let correlation = self.calculateCorrelation(actual: actuals, predicted: predicted)
+                let correlation = HealthMetricStatistics.correlation(actual: actuals, predicted: predicted)
 
                 // Save model with training data range for prediction clamping
                 let targetMin = allTargets.min()
                 let targetMax = allTargets.max()
-                try self.saveModel(model, for: targetId, correlation: correlation, modelType: useModelType, targetMin: targetMin, targetMax: targetMax)
+                try self.saveModel(model, for: resolvedTargetId, correlation: correlation, modelType: useModelType, targetMin: targetMin, targetMax: targetMax)
 
                 completion(.success(correlation))
             } catch {
@@ -183,19 +184,35 @@ class FaceHealthModelTrainer {
         }
     }
 
-    /// Aggregate captures by day: average features, use latest target
+    /// Aggregate captures by day: average features, use latest normalized target.
     private func aggregateByDay(captures: [StoredFaceCapture], targetId: String) -> [(dayKey: String, avgFeatures: [Double], latestTarget: Double, latestDate: Date, captureIds: [String])] {
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
 
+        let rawTargetValues = captures.compactMap { capture -> Double? in
+            guard capture.metrics != nil,
+                  let healthData = capture.healthData else { return nil }
+            return self.extractRawTargetValue(targetId: targetId, healthData: healthData)
+        }
+        let targetReference = HealthMetricValueNormalizer.referenceValue(for: rawTargetValues, targetId: targetId)
+
         // Group captures by day
         var dayGroups: [String: [(features: [Double], target: Double, date: Date, captureId: String)]] = [:]
+        var correctedTargetCount = 0
+        var droppedTargetCount = 0
 
         for capture in captures {
             guard let metrics = capture.metrics,
                   let healthData = capture.healthData else { continue }
 
-            guard let targetValue = self.extractTargetValue(targetId: targetId, healthData: healthData) else { continue }
+            guard let rawTargetValue = self.extractRawTargetValue(targetId: targetId, healthData: healthData) else { continue }
+            guard let targetValue = HealthMetricValueNormalizer.normalizedValue(rawTargetValue, targetId: targetId, reference: targetReference) else {
+                droppedTargetCount += 1
+                continue
+            }
+            if abs(rawTargetValue - targetValue) > max(0.000001, abs(rawTargetValue) * 0.000001) {
+                correctedTargetCount += 1
+            }
 
             let featureVector = self.extractFeatures(from: metrics, captureDate: capture.captureDate)
             let dayKey = dateFormatter.string(from: capture.captureDate)
@@ -231,33 +248,40 @@ class FaceHealthModelTrainer {
             result.append((dayKey: dayKey, avgFeatures: avgFeatures, latestTarget: latestTarget, latestDate: latestDate, captureIds: captureIds))
         }
 
-        // Remove outliers using IQR method to filter bad data
-        // (e.g., scales writing lean body mass in wrong units to HealthKit)
-        return removeOutliers(from: result)
-    }
-
-    /// Remove statistical outliers from training data using IQR method.
-    /// Handles cases where HealthKit source devices write values in incorrect units.
-    private func removeOutliers(from data: [(dayKey: String, avgFeatures: [Double], latestTarget: Double, latestDate: Date, captureIds: [String])]) -> [(dayKey: String, avgFeatures: [Double], latestTarget: Double, latestDate: Date, captureIds: [String])] {
-        guard data.count >= 4 else { return data }
-
-        let targets = data.map { $0.latestTarget }.sorted()
-        let q1Index = targets.count / 4
-        let q3Index = (targets.count * 3) / 4
-        let q1 = targets[q1Index]
-        let q3 = targets[q3Index]
-        let iqr = q3 - q1
-
-        // Use 3x IQR for a generous outlier threshold (only reject extreme values)
-        let lowerBound = q1 - 3.0 * iqr
-        let upperBound = q3 + 3.0 * iqr
-
-        let filtered = data.filter { $0.latestTarget >= lowerBound && $0.latestTarget <= upperBound }
-
-        if filtered.count < data.count {
-            print("Outlier filter: removed \(data.count - filtered.count) days with values outside [\(String(format: "%.1f", lowerBound)), \(String(format: "%.1f", upperBound))]")
+        if correctedTargetCount > 0 || droppedTargetCount > 0 {
+            print("Unit correction: \(targetId) corrected \(correctedTargetCount) samples, dropped \(droppedTargetCount) implausible samples")
         }
 
+        return removePhysicalOutliers(from: result, targetId: targetId)
+    }
+
+    /// Remove values that exceed physical bounds after normalization.
+    /// Handles bimodal data where some readings come from a different source/unit.
+    private func removePhysicalOutliers(
+        from data: [(dayKey: String, avgFeatures: [Double], latestTarget: Double, latestDate: Date, captureIds: [String])],
+        targetId: String
+    ) -> [(dayKey: String, avgFeatures: [Double], latestTarget: Double, latestDate: Date, captureIds: [String])] {
+        guard data.count >= 4 else { return data }
+
+        if let profile = HealthMetricValueNormalizer.profile(for: targetId) {
+            let filtered = data.filter { profile.contains($0.latestTarget) }
+            if filtered.count < data.count {
+                print("Physical bounds filter: removed \(data.count - filtered.count) days outside \(profile.min)-\(profile.max) for \(targetId)")
+            }
+            return filtered
+        }
+
+        // For non-mass metrics, use IQR-based outlier removal.
+        let targets = data.map { $0.latestTarget }.sorted()
+        let q1 = targets[targets.count / 4]
+        let q3 = targets[(targets.count * 3) / 4]
+        let iqr = q3 - q1
+        let iqrUpper = q3 + 3.0 * iqr
+        let iqrLower = q1 - 3.0 * iqr
+        let filtered = data.filter { $0.latestTarget >= iqrLower && $0.latestTarget <= iqrUpper }
+        if filtered.count < data.count {
+            print("IQR filter: removed \(data.count - filtered.count) outlier days")
+        }
         return filtered
     }
 
@@ -313,7 +337,7 @@ class FaceHealthModelTrainer {
         return extractFeatures(from: metrics, captureDate: Date())
     }
 
-    func extractTargetValue(targetId: String, healthData: [String: String]) -> Double? {
+    private func extractRawTargetValue(targetId: String, healthData: [String: String]) -> Double? {
         switch targetId {
         case "sleepScore":
             return SleepScoreCalculator.calculate(from: healthData)
@@ -326,65 +350,30 @@ class FaceHealthModelTrainer {
                   let rhr = Double(value) else { return nil }
             return rhr
         default:
-            // For custom targets, the targetId is the health data key
-            guard let value = healthData[targetId],
-                  let numValue = Double(value) else { return nil }
-
-            // Apply unit correction for mass metrics where HealthKit source
-            // devices may write values in wrong units (e.g., grams declared as kg,
-            // or weight*percentage instead of weight*fraction)
-            return Self.correctMassUnit(value: numValue, targetId: targetId)
+            for key in HealthMetricTargetAliases.lookupKeys(for: targetId) {
+                guard let value = healthData[key],
+                      let numValue = Double(value) else { continue }
+                return numValue
+            }
+            return nil
         }
     }
 
-    /// Detects and corrects mass values that are clearly in the wrong unit.
-    /// Some scales/fitness apps write lean body mass with incorrect units to HealthKit,
-    /// resulting in values 100x too large (e.g., 10,000+ instead of ~100-200 lb).
-    static func correctMassUnit(value: Double, targetId: String) -> Double {
-        // Only apply to mass metrics (lb or kg)
-        if targetId.contains("(lb)") {
-            // Physical maximum for any human body mass metric in pounds
-            // (even a 400 lb person's lean mass would be < 350 lb)
-            if value > 500 {
-                // Value is impossibly large for pounds. Most likely the source
-                // device wrote the value with an incorrect unit multiplier.
-                // Divide by the detected scale factor to normalize to pounds.
-                // Common case: value is ~100x too large (weight * percentage instead of fraction)
-                let corrected = value / 100.0
-                if corrected >= 30 && corrected <= 500 {
-                    return corrected
-                }
-                // Try grams-to-pounds conversion
-                let gramsToLb = value / 453.592
-                if gramsToLb >= 30 && gramsToLb <= 500 {
-                    return gramsToLb
-                }
-                // Value is garbage regardless of correction, skip it
-                return value  // Will be caught by outlier filter
-            }
-        } else if targetId.contains("(kg)") {
-            if value > 250 {
-                let corrected = value / 100.0
-                if corrected >= 15 && corrected <= 250 {
-                    return corrected
-                }
-                let gramsToKg = value / 1000.0
-                if gramsToKg >= 15 && gramsToKg <= 250 {
-                    return gramsToKg
-                }
-                return value
-            }
+    func extractTargetValue(targetId: String, healthData: [String: String]) -> Double? {
+        guard let rawValue = extractRawTargetValue(targetId: targetId, healthData: healthData) else {
+            return nil
         }
-        return value
+        return HealthMetricValueNormalizer.normalizedValue(rawValue, targetId: targetId)
     }
 
     /// Check how many samples have data for a given target
     func sampleCountForTarget(_ targetId: String, captures: [StoredFaceCapture]) -> Int {
+        let resolvedTargetId = HealthMetricTargetAliases.canonicalDisplayTargetId(targetId)
         var count = 0
         for capture in captures {
             guard capture.metrics != nil,
                   let healthData = capture.healthData else { continue }
-            if extractTargetValue(targetId: targetId, healthData: healthData) != nil {
+            if extractTargetValue(targetId: resolvedTargetId, healthData: healthData) != nil {
                 count += 1
             }
         }
@@ -682,6 +671,7 @@ class FaceHealthModelTrainer {
 
     /// Get the number of valid days (with both metrics and target data) for a target
     func getSampleCount(for targetId: String, captures: [StoredFaceCapture]) -> Int {
+        let resolvedTargetId = HealthMetricTargetAliases.canonicalDisplayTargetId(targetId)
         var dayGroups: Set<String> = []
         let dateFormatter = DateFormatter()
         dateFormatter.dateFormat = "yyyy-MM-dd"
@@ -690,7 +680,7 @@ class FaceHealthModelTrainer {
             guard capture.metrics != nil,
                   let healthData = capture.healthData else { continue }
 
-            guard extractTargetValue(targetId: targetId, healthData: healthData) != nil else { continue }
+            guard extractTargetValue(targetId: resolvedTargetId, healthData: healthData) != nil else { continue }
 
             let dayKey = dateFormatter.string(from: capture.captureDate)
             dayGroups.insert(dayKey)
@@ -701,12 +691,13 @@ class FaceHealthModelTrainer {
 
     /// Get the number of individual captures with valid data for a target
     func getCaptureCount(for targetId: String, captures: [StoredFaceCapture]) -> Int {
+        let resolvedTargetId = HealthMetricTargetAliases.canonicalDisplayTargetId(targetId)
         var count = 0
         for capture in captures {
             guard capture.metrics != nil,
                   let healthData = capture.healthData else { continue }
 
-            guard extractTargetValue(targetId: targetId, healthData: healthData) != nil else { continue }
+            guard extractTargetValue(targetId: resolvedTargetId, healthData: healthData) != nil else { continue }
 
             count += 1
         }
@@ -716,20 +707,23 @@ class FaceHealthModelTrainer {
     // MARK: - Prediction
 
     func predict(for targetId: String, metrics: FacialMetrics) -> Double? {
-        guard let (model, _) = loadModel(for: targetId) else { return nil }
+        let resolvedTargetId = HealthMetricTargetAliases.canonicalDisplayTargetId(targetId)
+        guard let (model, _) = loadModel(for: resolvedTargetId) else { return nil }
         let features = extractFeaturesForPrediction(from: metrics)
         var prediction = predict(model: model, features: features)
 
         // Clamp prediction to training data range (with 50% margin) to prevent
         // wild extrapolation from ill-conditioned linear regression
-        if let metadata = loadMetadata(for: targetId),
+        if let metadata = loadMetadata(for: resolvedTargetId),
            let min = metadata.targetMin,
            let max = metadata.targetMax {
             let range = max - min
             let margin = range * 0.5
             prediction = Swift.min(Swift.max(prediction, min - margin), max + margin)
+
         }
 
+        prediction = HealthMetricValueNormalizer.normalizedValue(prediction, targetId: resolvedTargetId) ?? prediction
         return prediction
     }
 
@@ -763,33 +757,6 @@ class FaceHealthModelTrainer {
         return prediction
     }
 
-    // MARK: - Correlation
-
-    private func calculateCorrelation(actual: [Double], predicted: [Double]) -> Double {
-        guard actual.count == predicted.count, actual.count > 1 else { return 0 }
-
-        let n = Double(actual.count)
-        let meanActual = actual.reduce(0, +) / n
-        let meanPredicted = predicted.reduce(0, +) / n
-
-        var numerator = 0.0
-        var denomActual = 0.0
-        var denomPredicted = 0.0
-
-        for i in 0..<actual.count {
-            let diffActual = actual[i] - meanActual
-            let diffPredicted = predicted[i] - meanPredicted
-            numerator += diffActual * diffPredicted
-            denomActual += diffActual * diffActual
-            denomPredicted += diffPredicted * diffPredicted
-        }
-
-        let denominator = sqrt(denomActual * denomPredicted)
-        guard denominator > 0 else { return 0 }
-
-        return numerator / denominator
-    }
-
     // MARK: - Leave-One-Out Cross-Validation
 
     /// Performs leave-one-DAY-out cross-validation using daily-aggregated data.
@@ -799,10 +766,11 @@ class FaceHealthModelTrainer {
         captures: [StoredFaceCapture],
         modelType: ModelType? = nil
     ) -> (correlation: Double, actuals: [Double], predictions: [Double], dates: [Date], captureIds: [[String]])? {
+        let resolvedTargetId = HealthMetricTargetAliases.canonicalDisplayTargetId(targetId)
         let useModelType = modelType ?? Self.currentModelType
 
         // Aggregate data by day
-        let dayData = aggregateByDay(captures: captures, targetId: targetId)
+        let dayData = aggregateByDay(captures: captures, targetId: resolvedTargetId)
 
         guard dayData.count >= 7 else { return nil }
 
@@ -860,35 +828,64 @@ class FaceHealthModelTrainer {
             allCaptureIds.append(sortedDays[i].captureIds)
         }
 
-        let looCorrelation = calculateCorrelation(actual: allActuals, predicted: allPredictions)
+        let looCorrelation = HealthMetricStatistics.correlation(actual: allActuals, predicted: allPredictions)
 
         return (looCorrelation, allActuals, allPredictions, allDates, allCaptureIds)
     }
 
     /// Get detailed CV results for visualization
     func getCVResults(for targetId: String, captures: [StoredFaceCapture], modelType: ModelType? = nil) -> ModelCVResults? {
-        guard let (correlation, actuals, predictions, dates, captureIds) = leaveOneOutCV(for: targetId, captures: captures, modelType: modelType) else {
+        let resolvedTargetId = HealthMetricTargetAliases.canonicalDisplayTargetId(targetId)
+        guard let (_, rawActuals, rawPredictions, dates, captureIds) = leaveOneOutCV(for: resolvedTargetId, captures: captures, modelType: modelType) else {
             return nil
         }
 
-        // Calculate additional statistics
-        let n = actuals.count
-        let meanActual = actuals.reduce(0, +) / Double(n)
-        let errors = zip(actuals, predictions).map { $0 - $1 }
-        let mae = errors.map { abs($0) }.reduce(0, +) / Double(n)
-        let rmse = sqrt(errors.map { $0 * $0 }.reduce(0, +) / Double(n))
+        HealthMetricDiagnostics.logCVSeries(
+            context: "Trainer CV raw",
+            targetId: resolvedTargetId,
+            actuals: rawActuals,
+            predictions: rawPredictions
+        )
+
+        let normalizedResults = HealthMetricValueNormalizer.normalizePairedSeries(
+            actuals: rawActuals,
+            predictions: rawPredictions,
+            targetId: resolvedTargetId
+        )
+
+        if normalizedResults.changed {
+            print("CV unit correction: \(resolvedTargetId) corrected \(normalizedResults.correctedActualCount) actuals, corrected \(normalizedResults.correctedPredictionCount) predictions, dropped \(normalizedResults.droppedCount) points")
+        }
+
+        let actuals = normalizedResults.actuals
+        let predictions = normalizedResults.predictions
+        guard actuals.count >= 2 else { return nil }
+
+        HealthMetricDiagnostics.logCVSeries(
+            context: "Trainer CV returned",
+            targetId: resolvedTargetId,
+            actuals: actuals,
+            predictions: predictions
+        )
+
+        let filteredDates = normalizedResults.keptIndices.map { dates[$0] }
+        let filteredCaptureIds = normalizedResults.keptIndices.map { captureIds[$0] }
+        let normalizedCorrelation = HealthMetricStatistics.correlation(actual: actuals, predicted: predictions)
+        guard let errorSummary = HealthMetricStatistics.errorSummary(actuals: actuals, predictions: predictions) else {
+            return nil
+        }
 
         return ModelCVResults(
-            targetId: targetId,
-            correlation: correlation,
-            sampleCount: n,
-            meanActual: meanActual,
-            mae: mae,
-            rmse: rmse,
+            targetId: resolvedTargetId,
+            correlation: normalizedCorrelation,
+            sampleCount: actuals.count,
+            meanActual: errorSummary.meanActual,
+            mae: errorSummary.mae,
+            rmse: errorSummary.rmse,
             actuals: actuals,
             predictions: predictions,
-            dates: dates,
-            captureIds: captureIds
+            dates: filteredDates,
+            captureIds: filteredCaptureIds
         )
     }
 
@@ -918,13 +915,15 @@ class FaceHealthModelTrainer {
 
     /// Sanitize a target ID for use as a filename (remove special characters)
     private func sanitizeForFilename(_ targetId: String) -> String {
+        let canonicalTargetId = HealthMetricTargetAliases.canonicalDisplayTargetId(targetId)
         // Replace problematic characters with underscores
         let invalidChars = CharacterSet(charactersIn: "/\\:*?\"<>|()[]{}#%&")
-        return targetId.components(separatedBy: invalidChars).joined(separator: "_")
+        return canonicalTargetId.components(separatedBy: invalidChars).joined(separator: "_")
     }
 
     private func saveModel(_ model: TrainedModel, for targetId: String, correlation: Double, modelType: ModelType, targetMin: Double? = nil, targetMax: Double? = nil) throws {
-        let safeId = sanitizeForFilename(targetId)
+        let canonicalTargetId = HealthMetricTargetAliases.canonicalDisplayTargetId(targetId)
+        let safeId = sanitizeForFilename(canonicalTargetId)
         let modelURL = modelsDirectory.appendingPathComponent("\(safeId)_model.json")
         let metadataURL = modelsDirectory.appendingPathComponent("\(safeId)_metadata.json")
 
@@ -932,7 +931,7 @@ class FaceHealthModelTrainer {
         try modelData.write(to: modelURL)
 
         var metadata = ModelMetadata(
-            targetId: targetId,
+            targetId: canonicalTargetId,
             correlation: correlation,
             trainedAt: Date(),
             featureCount: FeatureNames.all.count,
@@ -959,11 +958,13 @@ class FaceHealthModelTrainer {
 
     /// Delete model for target
     func deleteModel(for targetId: String) {
-        let safeId = sanitizeForFilename(targetId)
-        let modelURL = modelsDirectory.appendingPathComponent("\(safeId)_model.json")
-        let metadataURL = modelsDirectory.appendingPathComponent("\(safeId)_metadata.json")
-        try? fileManager.removeItem(at: modelURL)
-        try? fileManager.removeItem(at: metadataURL)
+        for targetKey in HealthMetricTargetAliases.lookupKeys(for: targetId) {
+            let safeId = sanitizeForFilename(targetKey)
+            let modelURL = modelsDirectory.appendingPathComponent("\(safeId)_model.json")
+            let metadataURL = modelsDirectory.appendingPathComponent("\(safeId)_metadata.json")
+            try? fileManager.removeItem(at: modelURL)
+            try? fileManager.removeItem(at: metadataURL)
+        }
     }
 
     /// Delete all models

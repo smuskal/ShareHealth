@@ -110,7 +110,7 @@ struct AddCustomTargetView: View {
                 .onTapGesture {
                     selectedMetric = metric
                     if customName.isEmpty {
-                        customName = cleanMetricName(metric)
+                        customName = cleanMetricName(HealthMetricTargetAliases.canonicalDisplayTargetId(metric))
                     }
                 }
             }
@@ -137,6 +137,7 @@ struct AddCustomTargetView: View {
             let builtInIds = Set(PredictionTarget.allTargets.map { $0.id })
             let customIds = Set(viewModel.customTargets.map { $0.id })
             let usedIds = builtInIds.union(customIds)
+            let usedKeys = Set(usedIds.flatMap { HealthMetricTargetAliases.lookupKeys(for: $0) })
 
             // Also map built-in IDs to their health keys
             let builtInHealthKeys: Set<String> = [
@@ -145,7 +146,10 @@ struct AddCustomTargetView: View {
                 // sleepScore is computed, not a direct health key
             ]
 
-            let available = metricSet.subtracting(usedIds).subtracting(builtInHealthKeys)
+            let available = metricSet
+                .subtracting(usedIds)
+                .subtracting(usedKeys)
+                .subtracting(builtInHealthKeys)
 
             DispatchQueue.main.async {
                 self.availableMetrics = Array(available).sorted()
@@ -157,9 +161,12 @@ struct AddCustomTargetView: View {
     private func sampleCount(for metric: String) -> Int {
         var count = 0
         for capture in dataStore.captures {
-            guard let healthData = capture.healthData,
-                  let value = healthData[metric],
-                  Double(value) != nil else { continue }
+            guard let healthData = capture.healthData else { continue }
+            let hasValue = HealthMetricTargetAliases.lookupKeys(for: metric).contains { key in
+                guard let value = healthData[key] else { return false }
+                return Double(value) != nil
+            }
+            guard hasValue else { continue }
             count += 1
         }
         return count
@@ -168,6 +175,8 @@ struct AddCustomTargetView: View {
     private func cleanMetricName(_ metric: String) -> String {
         metric
             .replacingOccurrences(of: " (count)", with: "")
+            .replacingOccurrences(of: " (lb)", with: "")
+            .replacingOccurrences(of: " (kg)", with: "")
             .replacingOccurrences(of: " (count/min)", with: "")
             .replacingOccurrences(of: " (ms)", with: "")
             .replacingOccurrences(of: " (hr)", with: "")
@@ -184,7 +193,10 @@ struct AddCustomTargetView: View {
 
     private func addTarget() {
         guard let metric = selectedMetric, !customName.isEmpty else { return }
-        viewModel.addCustomTarget(name: customName, healthKey: metric)
+        viewModel.addCustomTarget(
+            name: customName,
+            healthKey: HealthMetricTargetAliases.canonicalDisplayTargetId(metric)
+        )
         dismiss()
     }
 }

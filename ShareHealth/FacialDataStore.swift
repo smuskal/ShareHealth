@@ -75,9 +75,11 @@ class FacialDataStore: ObservableObject {
         let metricsURL = directory.appendingPathComponent("\(baseFilename).json")
         try FaceAnalysisCoordinator.saveMetrics(metrics, to: metricsURL)
 
+        let normalizedHealthData = HealthMetricValueNormalizer.normalizeHealthData(healthData, context: "save capture \(baseFilename)")
+
         // Save health data snapshot
         let healthURL = directory.appendingPathComponent("\(baseFilename)_health.json")
-        let healthJSON = try JSONSerialization.data(withJSONObject: healthData, options: [.prettyPrinted, .sortedKeys])
+        let healthJSON = try JSONSerialization.data(withJSONObject: normalizedHealthData, options: [.prettyPrinted, .sortedKeys])
         try healthJSON.write(to: healthURL)
 
         print("Saved face capture locally: \(baseFilename)")
@@ -165,7 +167,7 @@ class FacialDataStore: ObservableObject {
         if fileManager.fileExists(atPath: healthURL.path),
            let data = try? Data(contentsOf: healthURL),
            let json = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
-            healthData = json
+            healthData = HealthMetricValueNormalizer.normalizeHealthData(json)
         }
 
         return StoredFaceCapture(
@@ -302,9 +304,10 @@ class FacialDataStore: ObservableObject {
             exporter.exportHealthDataRaw(for: capture.captureDate) { healthData in
                 queue.async {
                     if let healthData = healthData, !healthData.isEmpty {
+                        let normalizedHealthData = HealthMetricValueNormalizer.normalizeHealthData(healthData, context: "backfill \(capture.id)")
                         // Save health data JSON
                         do {
-                            let healthJSON = try JSONSerialization.data(withJSONObject: healthData, options: [.prettyPrinted, .sortedKeys])
+                            let healthJSON = try JSONSerialization.data(withJSONObject: normalizedHealthData, options: [.prettyPrinted, .sortedKeys])
                             try healthJSON.write(to: capture.healthURL)
                             successCount += 1
                             DispatchQueue.main.async {
@@ -331,7 +334,8 @@ class FacialDataStore: ObservableObject {
 
     /// Update health data for a single capture
     func updateHealthData(for capture: StoredFaceCapture, healthData: [String: String]) throws {
-        let healthJSON = try JSONSerialization.data(withJSONObject: healthData, options: [.prettyPrinted, .sortedKeys])
+        let normalizedHealthData = HealthMetricValueNormalizer.normalizeHealthData(healthData, context: "update \(capture.id)")
+        let healthJSON = try JSONSerialization.data(withJSONObject: normalizedHealthData, options: [.prettyPrinted, .sortedKeys])
         try healthJSON.write(to: capture.healthURL)
     }
 }

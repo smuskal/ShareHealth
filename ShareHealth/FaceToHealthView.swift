@@ -720,10 +720,12 @@ struct FaceToHealthView: View {
                                     guard !viewModel.isTraining else { return }
                                     switch status {
                                     case .trained:
+                                        let displayName = viewModel.targetName(for: targetId)
+                                        let detailTargetId = HealthMetricTargetAliases.canonicalDisplayTargetId(targetId, displayName: displayName)
                                         // Show model details
                                         selectedModelForDetail = ModelDetailSelection(
-                                            targetId: targetId,
-                                            targetName: viewModel.targetName(for: targetId)
+                                            targetId: detailTargetId,
+                                            targetName: displayName
                                         )
                                     case .notTrained, .failed:
                                         // Trigger retraining
@@ -1249,34 +1251,7 @@ private struct PredictionRow: View {
     }
 
     private func formatPrediction(_ value: Double, for targetId: String) -> String {
-        switch targetId {
-        case "sleepScore":
-            return String(format: "%.0f", max(0, min(100, value)))
-        case "hrv":
-            return String(format: "%.0f ms", max(0, value))
-        case "restingHR":
-            return String(format: "%.0f bpm", max(0, value))
-        default:
-            if targetId.hasSuffix("(lb)") {
-                return String(format: "%.1f lb", max(0, value))
-            } else if targetId.hasSuffix("(kg)") {
-                return String(format: "%.1f kg", max(0, value))
-            } else if targetId.hasSuffix("(kcal)") {
-                return String(format: "%.0f kcal", max(0, value))
-            } else if targetId.hasSuffix("(min)") {
-                return String(format: "%.0f min", max(0, value))
-            } else if targetId.hasSuffix("(%)") {
-                return String(format: "%.1f%%", max(0, min(100, value)))
-            } else if targetId.hasSuffix("(count)") {
-                return String(format: "%.0f", max(0, value))
-            } else if targetId.hasSuffix("(count/min)") {
-                return String(format: "%.0f bpm", max(0, value))
-            } else if targetId.hasSuffix("(ms)") {
-                return String(format: "%.0f ms", max(0, value))
-            } else {
-                return String(format: "%.1f", value)
-            }
-        }
+        HealthMetricDisplayFormatter.formatPrediction(value, for: targetId)
     }
 
     private func colorForPrediction(_ value: Double, targetId: String) -> Color {
@@ -1421,11 +1396,15 @@ class FaceToHealthViewModel: ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async {
             let captures = FacialDataStore.shared.captures
             var count = 0
+            let lookupKeys = HealthMetricTargetAliases.lookupKeys(for: healthKey)
 
             for capture in captures {
-                guard let healthData = capture.healthData,
-                      let value = healthData[healthKey],
-                      Double(value) != nil else { continue }
+                guard let healthData = capture.healthData else { continue }
+                let hasValue = lookupKeys.contains { key in
+                    guard let value = healthData[key] else { return false }
+                    return Double(value) != nil
+                }
+                guard hasValue else { continue }
                 count += 1
             }
 
@@ -1477,11 +1456,12 @@ class FaceToHealthViewModel: ObservableObject {
     }
 
     func toggleTarget(_ targetId: String) {
-        if selectedTargets.contains(targetId) {
-            selectedTargets.remove(targetId)
+        let canonicalTargetId = HealthMetricTargetAliases.canonicalDisplayTargetId(targetId)
+        if selectedTargets.contains(canonicalTargetId) {
+            selectedTargets.remove(canonicalTargetId)
         } else {
-            selectedTargets.insert(targetId)
-            updateModelStatus(for: targetId)
+            selectedTargets.insert(canonicalTargetId)
+            updateModelStatus(for: canonicalTargetId)
         }
         saveSelectedTargets()
     }
@@ -1531,12 +1511,20 @@ class FaceToHealthViewModel: ObservableObject {
 
     private func loadSavedTargets() {
         if let saved = UserDefaults.standard.array(forKey: "selectedPredictionTargets") as? [String] {
-            selectedTargets = Set(saved)
+            let canonicalTargets = Set(saved.map { HealthMetricTargetAliases.canonicalDisplayTargetId($0) })
+            if canonicalTargets != Set(saved) {
+                print("ShareHealthMetricDebug selectedPredictionTargets migrated \(saved) -> \(Array(canonicalTargets))")
+            }
+            selectedTargets = canonicalTargets
+            saveSelectedTargets()
         }
     }
 
     private func saveSelectedTargets() {
-        UserDefaults.standard.set(Array(selectedTargets), forKey: "selectedPredictionTargets")
+        let canonicalTargets = Array(selectedTargets)
+            .map { HealthMetricTargetAliases.canonicalDisplayTargetId($0) }
+        selectedTargets = Set(canonicalTargets)
+        UserDefaults.standard.set(canonicalTargets, forKey: "selectedPredictionTargets")
     }
 
     func retrainAllModels() {
@@ -1642,9 +1630,15 @@ class FaceToHealthViewModel: ObservableObject {
         if let target = customTargets.first(where: { $0.id == targetId }) {
             return target.name
         }
+        let canonicalTargetId = HealthMetricTargetAliases.canonicalDisplayTargetId(targetId)
+        if canonicalTargetId != targetId {
+            return targetName(for: canonicalTargetId)
+        }
         // For arbitrary health keys, clean up the name
-        return targetId
+        return canonicalTargetId
             .replacingOccurrences(of: " (count)", with: "")
+            .replacingOccurrences(of: " (lb)", with: "")
+            .replacingOccurrences(of: " (kg)", with: "")
             .replacingOccurrences(of: " (count/min)", with: "")
             .replacingOccurrences(of: " (ms)", with: "")
             .replacingOccurrences(of: " (hr)", with: "")
@@ -1658,14 +1652,30 @@ class FaceToHealthViewModel: ObservableObject {
     func loadCustomTargets() {
         if let data = UserDefaults.standard.data(forKey: "customPredictionTargets"),
            let targets = try? JSONDecoder().decode([CustomTarget].self, from: data) {
-            customTargets = targets.map {
-                PredictionTarget(id: $0.healthKey, name: $0.name, description: "Predict \($0.name.lowercased()) from facial analysis", icon: "plus.circle")
+            var seen = Set<String>()
+            var migratedSelectedTargets = selectedTargets
+            customTargets = targets.compactMap {
+                let canonicalKey = HealthMetricTargetAliases.canonicalDisplayTargetId($0.healthKey, displayName: $0.name)
+                if migratedSelectedTargets.contains($0.healthKey), canonicalKey != $0.healthKey {
+                    migratedSelectedTargets.insert(canonicalKey)
+                }
+                guard seen.insert(canonicalKey).inserted else { return nil }
+                return PredictionTarget(id: canonicalKey, name: $0.name, description: "Predict \($0.name.lowercased()) from facial analysis", icon: "plus.circle")
             }
+            if migratedSelectedTargets != selectedTargets {
+                print("ShareHealthMetricDebug customPredictionTargets migrated selected targets \(Array(selectedTargets)) -> \(Array(migratedSelectedTargets))")
+            }
+            selectedTargets = migratedSelectedTargets
+            saveCustomTargets()
+            saveSelectedTargets()
         }
     }
 
     func addCustomTarget(name: String, healthKey: String) {
-        let target = PredictionTarget(id: healthKey, name: name, description: "Predict \(name.lowercased()) from facial analysis", icon: "plus.circle")
+        let canonicalKey = HealthMetricTargetAliases.canonicalDisplayTargetId(healthKey, displayName: name)
+        customTargets.removeAll { $0.id == canonicalKey }
+        availableTargets.removeAll { $0.id == canonicalKey }
+        let target = PredictionTarget(id: canonicalKey, name: name, description: "Predict \(name.lowercased()) from facial analysis", icon: "plus.circle")
         customTargets.append(target)
         saveCustomTargets()
 
@@ -1684,9 +1694,10 @@ class FaceToHealthViewModel: ObservableObject {
     }
 
     func removeCustomTarget(_ targetId: String) {
-        customTargets.removeAll { $0.id == targetId }
-        availableTargets.removeAll { $0.id == targetId }
-        selectedTargets.remove(targetId)
+        let aliases = Set(HealthMetricTargetAliases.lookupKeys(for: targetId))
+        customTargets.removeAll { aliases.contains($0.id) }
+        availableTargets.removeAll { aliases.contains($0.id) }
+        selectedTargets.subtract(aliases)
         saveCustomTargets()
         saveSelectedTargets()
     }
@@ -2043,34 +2054,7 @@ private struct LivePredictionRow: View {
     }
 
     private func formatPrediction(_ value: Double, for targetId: String) -> String {
-        switch targetId {
-        case "sleepScore":
-            return String(format: "%.0f", max(0, min(100, value)))
-        case "hrv":
-            return String(format: "%.0f ms", max(0, value))
-        case "restingHR":
-            return String(format: "%.0f bpm", max(0, value))
-        default:
-            if targetId.hasSuffix("(lb)") {
-                return String(format: "%.1f lb", max(0, value))
-            } else if targetId.hasSuffix("(kg)") {
-                return String(format: "%.1f kg", max(0, value))
-            } else if targetId.hasSuffix("(kcal)") {
-                return String(format: "%.0f kcal", max(0, value))
-            } else if targetId.hasSuffix("(min)") {
-                return String(format: "%.0f min", max(0, value))
-            } else if targetId.hasSuffix("(%)") {
-                return String(format: "%.1f%%", max(0, min(100, value)))
-            } else if targetId.hasSuffix("(count)") {
-                return String(format: "%.0f", max(0, value))
-            } else if targetId.hasSuffix("(count/min)") {
-                return String(format: "%.0f bpm", max(0, value))
-            } else if targetId.hasSuffix("(ms)") {
-                return String(format: "%.0f ms", max(0, value))
-            } else {
-                return String(format: "%.1f", value)
-            }
-        }
+        HealthMetricDisplayFormatter.formatPrediction(value, for: targetId)
     }
 
     private func colorForPrediction(_ value: Double, targetId: String) -> Color {
